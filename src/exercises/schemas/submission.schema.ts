@@ -42,6 +42,18 @@ export class Submission {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId!: Types.ObjectId;
 
+  @Prop({ type: String, required: true, index: true })
+  practiceId!: string;
+
+  @Prop({ type: String, required: true })
+  title!: string;
+
+  @Prop({ type: String, required: true })
+  topic!: string;
+
+  @Prop({ type: String, required: true })
+  track!: string;
+
   /** Either a Question OR an Exercise — track separately */
   @Prop({ type: Types.ObjectId, ref: 'Question' })
   questionId?: Types.ObjectId;
@@ -84,6 +96,9 @@ export class Submission {
   memoryKb?: number;
 
   @Prop({ type: String })
+  notes?: string;
+
+  @Prop({ type: String })
   compilerError?: string;
 
   /** Attempt number for this (user, question/exercise) pair */
@@ -98,6 +113,7 @@ export class Submission {
 export const SubmissionSchema = SchemaFactory.createForClass(Submission);
 
 SubmissionSchema.index({ userId: 1, createdAt: -1 });
+SubmissionSchema.index({ practiceId: 1, createdAt: -1 });
 SubmissionSchema.index({ userId: 1, questionId: 1 });
 SubmissionSchema.index({ userId: 1, exerciseId: 1 });
 SubmissionSchema.index({ userId: 1, nodeId: 1 });

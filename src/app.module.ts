@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { MongoMemoryServer } from 'mongodb-memory-server';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -17,6 +20,9 @@ import { SurveyModule } from './survey/survey.module';
 import { AdminModule } from './admin/admin.module';
 import { CommonModule } from './common/common.module';
 
+let memoryMongoServer: MongoMemoryServer | null = null;
+const persistentMongoPath = join(process.cwd(), '.local-data', 'mongodb');
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -25,9 +31,28 @@ import { CommonModule } from './common/common.module';
 
     MongooseModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        uri: config.getOrThrow<string>('MONGODB_URI'),
-      }),
+      useFactory: async (config: ConfigService) => {
+        let uri =
+          config.get<string>('MONGODB_URI') || config.get<string>('MONGO_URI');
+
+        if (!uri) {
+          mkdirSync(persistentMongoPath, { recursive: true });
+          memoryMongoServer ??= await MongoMemoryServer.create({
+            instance: {
+              dbName: 'code-for-glory',
+              dbPath: persistentMongoPath,
+            },
+          });
+          uri = memoryMongoServer.getUri();
+        }
+
+        return {
+          uri,
+          dbName: 'code-for-glory',
+          retryAttempts: 0,
+          serverSelectionTimeoutMS: 1000,
+        };
+      },
     }),
 
     CommonModule,

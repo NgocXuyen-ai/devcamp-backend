@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { RecallModule } from '../recall/recall.module';
 
 import { LearningPathController } from './learning-path.controller';
 import { LearningPathService } from './learning-path.service';
@@ -14,6 +15,7 @@ import {
 
 @Module({
   imports: [
+    RecallModule,
     MongooseModule.forFeature([
       { name: Roadmap.name, schema: RoadmapSchema },
       { name: RoadmapNode.name, schema: RoadmapNodeSchema },

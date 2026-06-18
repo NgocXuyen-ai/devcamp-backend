@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
@@ -19,6 +19,7 @@ import { NotificationsModule } from './notifications/notification.module';
 import { SurveyModule } from './survey/survey.module';
 import { AdminModule } from './admin/admin.module';
 import { CommonModule } from './common/common.module';
+import { ShopModule } from './shop/shop.module';
 
 let memoryMongoServer: MongoMemoryServer | null = null;
 const persistentMongoPath = join(process.cwd(), '.local-data', 'mongodb');
@@ -32,15 +33,18 @@ const persistentMongoPath = join(process.cwd(), '.local-data', 'mongodb');
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (config: ConfigService) => {
+        const isJest = typeof process.env.JEST_WORKER_ID !== 'undefined';
         let uri =
           config.get<string>('MONGODB_URI') || config.get<string>('MONGO_URI');
 
         if (!uri) {
-          mkdirSync(persistentMongoPath, { recursive: true });
+          if (!isJest) {
+            mkdirSync(persistentMongoPath, { recursive: true });
+          }
           memoryMongoServer ??= await MongoMemoryServer.create({
             instance: {
               dbName: 'code-for-glory',
-              dbPath: persistentMongoPath,
+              ...(isJest ? {} : { dbPath: persistentMongoPath }),
             },
           });
           uri = memoryMongoServer.getUri();
@@ -73,6 +77,14 @@ const persistentMongoPath = join(process.cwd(), '.local-data', 'mongodb');
     NotificationsModule,
     SurveyModule,
     AdminModule,
+    ShopModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements OnApplicationShutdown {
+  async onApplicationShutdown() {
+    if (memoryMongoServer) {
+      await memoryMongoServer.stop();
+      memoryMongoServer = null;
+    }
+  }
+}

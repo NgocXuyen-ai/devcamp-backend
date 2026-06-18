@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { NodeStatus } from '../common/enums';
+import { RecallService } from '../recall/recall.service';
 
 import { Roadmap } from './schemas/roadmap.schema';
 import { RoadmapNode } from './schemas/roadmap-node.schema';
@@ -21,6 +23,8 @@ export class LearningPathService {
 
     @InjectModel(UserProgress.name)
     private readonly progressModel: Model<UserProgress>,
+
+    private readonly recallService: RecallService,
   ) {}
 
   // =========================
@@ -32,6 +36,7 @@ export class LearningPathService {
       title: dto.title,
       description: dto.description,
       field: dto.field,
+      level: dto.level,
     });
   }
 
@@ -97,7 +102,7 @@ export class LearningPathService {
   ) {
     const node = await this.getNodeById(nodeId);
 
-    return this.progressModel.findOneAndUpdate(
+    const progress = await this.progressModel.findOneAndUpdate(
       {
         userId: new Types.ObjectId(user.userId),
         nodeId: new Types.ObjectId(nodeId),
@@ -112,6 +117,15 @@ export class LearningPathService {
       },
       { new: true, upsert: true },
     );
+
+    if (dto.status === NodeStatus.COMPLETED) {
+      await this.recallService.scheduleNodeRecall(
+        new Types.ObjectId(user.userId),
+        new Types.ObjectId(nodeId),
+      );
+    }
+
+    return progress;
   }
 
   async getMyProgress(user: { userId: string }, roadmapId: string) {

@@ -3,6 +3,8 @@ import { MongooseModule } from '@nestjs/mongoose';
 
 import { LearningPathController } from './learning-path.controller';
 import { LearningPathService } from './learning-path.service';
+import { RoadmapService } from './services/roadmap.service';
+import { RoadmapNodeService } from './services/roadmap-node.service';
 
 import { Roadmap, RoadmapSchema } from './schemas/roadmap.schema';
 import { RoadmapNode, RoadmapNodeSchema } from './schemas/roadmap-node.schema';
@@ -21,6 +23,7 @@ import {
     ]),
   ],
   controllers: [LearningPathController],
-  providers: [LearningPathService],
+  providers: [LearningPathService, RoadmapService, RoadmapNodeService],
+  exports: [RoadmapService, RoadmapNodeService],
 })
 export class LearningPathModule {}

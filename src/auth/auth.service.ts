@@ -12,11 +12,16 @@ export class AuthService {
   ) {}
 
   async register(createUserDto: CreateUserDto) {
-    return await this.usersService.create(createUserDto);
+    const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
+    return await this.usersService.create({
+      username: createUserDto.name,
+      email: createUserDto.email,
+      password: hashedPassword,
+    });
   }
 
   async login(email: string, password: string) {
-    const user = await this.usersService.findOneByEmail(email);
+    const user = await this.usersService.findByEmail(email);
 
     if (!user || !user.password) {
       throw new UnauthorizedException(

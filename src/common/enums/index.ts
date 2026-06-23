@@ -1,7 +1,3 @@
-/**
- * Shared enums for the entire application
- */
-
 export enum UserRole {
   USER = 'user',
   ADMIN = 'admin',

@@ -10,10 +10,6 @@ import {
 
 export type UserDocument = HydratedDocument<User>;
 
-/**
- * Personalization config derived from the onboarding survey.
- * Captured from "Phân đoạn 3: Discipline & Penalty Setup".
- */
 @Schema({ _id: false })
 export class UserPreferences {
   @Prop({ type: Number, default: 2 })
@@ -146,6 +142,4 @@ export class User {
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
-// Compound indexes for common queries
-// (email & username already have unique indexes from their @Prop definitions)
 UserSchema.index({ provider: 1, providerId: 1 });

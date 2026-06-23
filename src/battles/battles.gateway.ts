@@ -23,7 +23,7 @@ export class BattlesGateway implements OnGatewayDisconnect {
     @MessageBody() data: { battleId: string },
     @ConnectedSocket() client: Socket,
   ) {
-    client.join(data.battleId);
+    void client.join(data.battleId);
 
     this.socketToBattle.set(client.id, data.battleId);
 

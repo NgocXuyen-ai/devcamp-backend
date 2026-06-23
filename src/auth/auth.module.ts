@@ -1,28 +1,44 @@
 import { Module } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { AuthController } from './auth.controller';
-import { UsersModule } from '../users/users.module';
+import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
+import { MongooseModule } from '@nestjs/mongoose';
 import { PassportModule } from '@nestjs/passport';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { UsersModule } from '../users/users.module';
+import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
-import { JwtAuthGuard } from './jwt-auth.guard';
+import { Otp, OtpSchema } from './schemas/otp.schema';
+import {
+  RefreshToken,
+  RefreshTokenSchema,
+} from './schemas/refresh-token.schema';
+import { AuthService } from './service/auth-core.service';
+import { MailService } from './service/mail.service';
+import { OtpService } from './service/otp.service';
+import { PasswordService } from './service/password.service';
 
 @Module({
   imports: [
     UsersModule,
     PassportModule,
+    MongooseModule.forFeature([
+      { name: RefreshToken.name, schema: RefreshTokenSchema },
+      { name: Otp.name, schema: OtpSchema },
+    ]),
     JwtModule.registerAsync({
-      imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: '1d' },
+        secret: configService.get<string>('auth.jwt.accessSecret'),
       }),
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard],
-  exports: [AuthService, JwtAuthGuard, JwtStrategy],
+  providers: [
+    AuthService,
+    OtpService,
+    PasswordService,
+    MailService,
+    JwtStrategy,
+  ],
+  exports: [AuthService],
 })
 export class AuthModule {}

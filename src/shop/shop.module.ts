@@ -9,7 +9,10 @@ import {
   ShopInventoryItem,
   ShopInventorySchema,
 } from './schemas/shop-inventory.schema';
-import { ShopPurchase, ShopPurchaseSchema } from './schemas/shop-purchase.schema';
+import {
+  ShopPurchase,
+  ShopPurchaseSchema,
+} from './schemas/shop-purchase.schema';
 import { ShopCoupon, ShopCouponSchema } from './schemas/shop-coupon.schema';
 import {
   ShopCouponRedemption,
@@ -31,4 +34,3 @@ import {
   providers: [ShopService],
 })
 export class ShopModule {}
-

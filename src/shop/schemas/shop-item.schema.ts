@@ -39,4 +39,3 @@ export class ShopItem {
 }
 
 export const ShopItemSchema = SchemaFactory.createForClass(ShopItem);
-

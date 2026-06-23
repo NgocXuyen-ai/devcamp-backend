@@ -22,4 +22,3 @@ export const ShopInventorySchema =
   SchemaFactory.createForClass(ShopInventoryItem);
 
 ShopInventorySchema.index({ userId: 1, itemId: 1 }, { unique: true });
-

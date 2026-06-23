@@ -5,7 +5,13 @@ export type ShopCouponDocument = HydratedDocument<ShopCoupon>;
 
 @Schema({ timestamps: true })
 export class ShopCoupon {
-  @Prop({ type: String, required: true, unique: true, uppercase: true, trim: true })
+  @Prop({
+    type: String,
+    required: true,
+    unique: true,
+    uppercase: true,
+    trim: true,
+  })
   code!: string;
 
   @Prop({ type: Number, required: true, min: 0 })
@@ -19,4 +25,3 @@ export class ShopCoupon {
 }
 
 export const ShopCouponSchema = SchemaFactory.createForClass(ShopCoupon);
-

@@ -3,6 +3,11 @@
   "rootDir": ".",
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
+  "globals": {
+    "ts-jest": {
+      "tsconfig": "test/tsconfig.e2e.json"
+    }
+  },
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   }

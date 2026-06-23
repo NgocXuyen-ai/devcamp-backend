@@ -1,11 +1,29 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import type { Request } from 'express';
+import { Types } from 'mongoose';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { LearningPathService } from './learning-path.service';
 import { CreateLearningPathDto } from './dto/create-learning-path.dto';
 import { CreateNodeDto } from './dto/create-node.dto';
-import { UseGuards } from '@nestjs/common';
-import { MockAuthGuard } from './mocks/mock-auth.guard';
-import { CurrentUser } from './mocks/current-user.decorator';
 import { UpdateProgressDto } from './dto/update-progress.dto';
+
+type JwtUser = { userId?: string | Types.ObjectId } | null;
+
+/** Lấy userId từ JWT nếu có, fallback demo user để chạy local không cần đăng nhập. */
+function getUserIdFromReq(req: Request): Types.ObjectId {
+  const jwtUser = (req as unknown as { user?: JwtUser }).user;
+  const raw = jwtUser?.userId;
+  if (raw && Types.ObjectId.isValid(raw)) return new Types.ObjectId(raw);
+  return new Types.ObjectId('507f1f77bcf86cd799439011');
+}
 
 @Controller('learning-paths')
 export class LearningPathController {
@@ -37,21 +55,25 @@ export class LearningPathController {
   }
 
   @Post('nodes/:nodeId/progress')
-  @UseGuards(MockAuthGuard)
+  @UseGuards(OptionalJwtAuthGuard)
   updateProgress(
-    @CurrentUser() user: { userId: string },
+    @Req() req: Request,
     @Param('nodeId') nodeId: string,
     @Body() dto: UpdateProgressDto,
   ) {
-    return this.learningPathService.updateProgress(user, nodeId, dto);
+    return this.learningPathService.updateProgress(
+      getUserIdFromReq(req),
+      nodeId,
+      dto,
+    );
   }
 
   @Get(':id/my-progress')
-  @UseGuards(MockAuthGuard)
-  getMyProgress(
-    @CurrentUser() user: { userId: string },
-    @Param('id') pathId: string,
-  ) {
-    return this.learningPathService.getMyProgress(user, pathId);
+  @UseGuards(OptionalJwtAuthGuard)
+  getMyProgress(@Req() req: Request, @Param('id') pathId: string) {
+    return this.learningPathService.getMyProgress(
+      getUserIdFromReq(req),
+      pathId,
+    );
   }
 }

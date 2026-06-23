@@ -31,6 +31,20 @@ import { SubmitAnswerDto } from './dto/submit-answer.dto';
 
 import { BattlesGateway } from './battles.gateway';
 
+export interface LeaderboardRow {
+  rank: number;
+  userId: string;
+  username: string;
+  field: string;
+  ratingPoints: number;
+  totalBattles: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
+  tier: string;
+}
+
 @Injectable()
 export class BattlesService {
   private readonly battleTimers = new Map<string, NodeJS.Timeout>();
@@ -108,15 +122,36 @@ export class BattlesService {
       },
     };
   }
-  async getLeaderboard(dto: GetLeaderboardDto) {
+  async getLeaderboard(dto: GetLeaderboardDto): Promise<LeaderboardRow[]> {
     const limit = dto.limit ?? 20;
 
     const rankings = await this.rankingModel
       .find({ field: dto.field })
       .sort({ ratingPoints: -1, winRate: -1 })
       .limit(limit)
+      .populate({ path: 'userId', select: 'username' })
       .lean();
-    return rankings;
+
+    // Trả kèm `username` + `rank` để FE hiển thị bảng xếp hạng trực tiếp.
+    return rankings.map((r, index): LeaderboardRow => {
+      const populated = r.userId as unknown as {
+        _id?: Types.ObjectId;
+        username?: string;
+      } | null;
+      return {
+        rank: index + 1,
+        userId: populated?._id ? String(populated._id) : String(r.userId),
+        username: populated?.username ?? 'Unknown',
+        field: r.field,
+        ratingPoints: r.ratingPoints,
+        totalBattles: r.totalBattles,
+        wins: r.wins,
+        losses: r.losses,
+        draws: r.draws,
+        winRate: r.winRate,
+        tier: r.tier,
+      };
+    });
   }
 
   async submitAnswer(battleId: string, userId: string, dto: SubmitAnswerDto) {

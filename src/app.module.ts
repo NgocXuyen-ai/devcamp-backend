@@ -62,8 +62,8 @@ const persistentMongoPath = join(process.cwd(), '.local-data', 'mongodb');
         return {
           uri,
           dbName: 'code-for-glory',
-          retryAttempts: 0,
-          serverSelectionTimeoutMS: 1000,
+          retryAttempts: 2,
+          serverSelectionTimeoutMS: 10000,
           connectionFactory: (connection: Connection) => {
             // Factory is called after the connection is established,
             // so log immediately instead of waiting for the 'connected' event

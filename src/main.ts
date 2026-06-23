@@ -10,7 +10,13 @@ async function bootstrap() {
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.setGlobalPrefix(config.get<string>('app.apiPrefix', 'api'));
-  app.enableCors({ origin: config.get<string>('app.corsOrigin', '*') });
+
+  const corsOrigin = config.get<string>('app.corsOrigin', '*');
+  app.enableCors({
+    origin:
+      corsOrigin === '*' ? true : corsOrigin.split(',').map((o) => o.trim()),
+    credentials: true,
+  });
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Code For Glory API')

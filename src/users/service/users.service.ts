@@ -193,4 +193,36 @@ export class UsersService {
     ]);
     return { items, total };
   }
+
+  // ----- admin operations -----
+
+  async setRole(userId: Types.ObjectId, role: UserRole): Promise<UserDocument> {
+    const doc = await this.userModel.findByIdAndUpdate(
+      userId,
+      { $set: { role } },
+      { new: true },
+    );
+    if (!doc) throw new NotFoundException('User not found');
+    return doc;
+  }
+
+  async softDelete(userId: Types.ObjectId): Promise<void> {
+    const farFuture = new Date(Date.now() + 100 * 365 * 86_400_000);
+    await this.userModel.updateOne(
+      { _id: userId },
+      { $set: { isLocked: true, lockedUntil: farFuture } },
+    );
+  }
+
+  async countAll(): Promise<number> {
+    return this.userModel.countDocuments({});
+  }
+
+  async countActiveSince(date: Date): Promise<number> {
+    return this.userModel.countDocuments({ lastLoginAt: { $gte: date } });
+  }
+
+  async countNewSince(date: Date): Promise<number> {
+    return this.userModel.countDocuments({ createdAt: { $gte: date } });
+  }
 }

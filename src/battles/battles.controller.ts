@@ -5,9 +5,13 @@ import {
   Param,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
+import { Types } from 'mongoose';
 
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { BattlesService } from './battles.service';
 
 import { CreateBattleDto } from './dto/create-battle.dto';
@@ -15,27 +19,43 @@ import { GetHistoryDto } from './dto/get-history.dto';
 import { GetLeaderboardDto } from './dto/get-leaderboard.dto';
 import { SubmitAnswerDto } from './dto/submit-answer.dto';
 
-import { MockAuthGuard } from './mocks/mock-auth.guard';
-import { CurrentUser } from './mocks/current-user.decorrator';
+type JwtUser = {
+  userId?: string | Types.ObjectId;
+  username?: string;
+  avatar?: string;
+} | null;
+
+/** Lấy user từ JWT nếu có, fallback demo user để chạy local không cần đăng nhập. */
+function getUserFromReq(req: Request): {
+  userId: string;
+  username: string;
+  avatar?: string;
+} {
+  const jwtUser = (req as unknown as { user?: JwtUser }).user;
+  const raw = jwtUser?.userId;
+  if (raw && Types.ObjectId.isValid(raw)) {
+    return {
+      userId: String(raw),
+      username: jwtUser?.username ?? 'player',
+      avatar: jwtUser?.avatar,
+    };
+  }
+  return { userId: '507f1f77bcf86cd799439011', username: 'demo-user' };
+}
+
 @Controller('battles')
-@UseGuards(MockAuthGuard)
+@UseGuards(OptionalJwtAuthGuard)
 export class BattlesController {
   constructor(private readonly battlesService: BattlesService) {}
 
   @Post('match')
-  create(
-    @CurrentUser() user: { userId: string; username: string; avatar?: string },
-    @Body() dto: CreateBattleDto,
-  ) {
-    return this.battlesService.createBattle(user, dto);
+  create(@Req() req: Request, @Body() dto: CreateBattleDto) {
+    return this.battlesService.createBattle(getUserFromReq(req), dto);
   }
 
   @Get('history')
-  history(
-    @CurrentUser() user: { userId: string },
-    @Query() dto: GetHistoryDto,
-  ) {
-    return this.battlesService.getUserHistory(user.userId, dto);
+  history(@Req() req: Request, @Query() dto: GetHistoryDto) {
+    return this.battlesService.getUserHistory(getUserFromReq(req).userId, dto);
   }
 
   @Get('leaderboard')
@@ -46,10 +66,14 @@ export class BattlesController {
   @Post(':id/submit')
   submit(
     @Param('id') id: string,
-    @CurrentUser() user: { userId: string },
+    @Req() req: Request,
     @Body() dto: SubmitAnswerDto,
   ) {
-    return this.battlesService.submitAnswer(id, user.userId, dto);
+    return this.battlesService.submitAnswer(
+      id,
+      getUserFromReq(req).userId,
+      dto,
+    );
   }
 
   @Get(':id/submissions')
@@ -62,12 +86,12 @@ export class BattlesController {
   }
 
   @Post(':id/abandon')
-  abandon(@Param('id') id: string, @CurrentUser() user: { userId: string }) {
-    return this.battlesService.abandonBattle(id, user.userId);
+  abandon(@Param('id') id: string, @Req() req: Request) {
+    return this.battlesService.abandonBattle(id, getUserFromReq(req).userId);
   }
 
   @Get(':id')
-  getOne(@Param('id') id: string, @CurrentUser() user: { userId: string }) {
-    return this.battlesService.getBattleById(id, user.userId);
+  getOne(@Param('id') id: string, @Req() req: Request) {
+    return this.battlesService.getBattleById(id, getUserFromReq(req).userId);
   }
 }

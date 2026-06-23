@@ -91,7 +91,7 @@ export class LearningPathService {
   // =========================
 
   async updateProgress(
-    user: { userId: string },
+    userId: Types.ObjectId,
     nodeId: string,
     dto: UpdateProgressDto,
   ) {
@@ -99,11 +99,11 @@ export class LearningPathService {
 
     return this.progressModel.findOneAndUpdate(
       {
-        userId: new Types.ObjectId(user.userId),
+        userId,
         nodeId: new Types.ObjectId(nodeId),
       },
       {
-        userId: new Types.ObjectId(user.userId),
+        userId,
         nodeId: new Types.ObjectId(nodeId),
         roadmapId: node.roadmapId,
 
@@ -114,11 +114,11 @@ export class LearningPathService {
     );
   }
 
-  async getMyProgress(user: { userId: string }, roadmapId: string) {
+  async getMyProgress(userId: Types.ObjectId, roadmapId: string) {
     await this.findPathById(roadmapId);
 
     return this.progressModel.find({
-      userId: new Types.ObjectId(user.userId),
+      userId,
       roadmapId: new Types.ObjectId(roadmapId),
     });
   }

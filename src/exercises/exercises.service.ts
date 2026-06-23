@@ -36,8 +36,6 @@ type SubmissionRecord = {
 
 @Injectable()
 export class ExercisesService {
-  private readonly demoUserId = new Types.ObjectId('64b000000000000000000001');
-
   constructor(
     @InjectModel(Submission.name)
     private readonly submissionModel: Model<SubmissionDocument>,
@@ -47,16 +45,16 @@ export class ExercisesService {
     return this.evaluate(dto, 'sample');
   }
 
-  async submit(dto: PracticeEvaluationDto) {
+  async submit(userId: Types.ObjectId, dto: PracticeEvaluationDto) {
     const runResult = await this.evaluate(dto, 'full');
     const attemptNumber =
       (await this.submissionModel.countDocuments({
         practiceId: dto.practiceId,
-        userId: this.demoUserId,
+        userId,
       })) + 1;
 
     const created = await this.submissionModel.create({
-      userId: this.demoUserId,
+      userId,
       practiceId: dto.practiceId,
       title: dto.title,
       topic: dto.topic,
@@ -92,7 +90,7 @@ export class ExercisesService {
     });
 
     const submission = this.toSubmissionRecord(created);
-    const submissions = await this.getSubmissions(dto.practiceId);
+    const submissions = await this.getSubmissions(userId, dto.practiceId);
 
     return {
       runResult,
@@ -101,11 +99,11 @@ export class ExercisesService {
     };
   }
 
-  async getSubmissions(practiceId: string) {
+  async getSubmissions(userId: Types.ObjectId, practiceId: string) {
     const items = await this.submissionModel
       .find({
         practiceId,
-        userId: this.demoUserId,
+        userId,
       })
       .sort({ createdAt: -1, _id: -1 })
       .limit(20)

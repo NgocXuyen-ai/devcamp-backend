@@ -51,6 +51,9 @@ export class UserGamification {
   @Prop({ type: Date })
   lastActiveDate?: Date;
 
+  @Prop({ type: Date })
+  lastDailyClaimAt?: Date;
+
   @Prop({ type: [String], default: [] })
   badges!: string[]; // ['founders_mantle', 'first_blood', ...]
 }

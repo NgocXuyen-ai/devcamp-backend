@@ -36,4 +36,3 @@ export class ShopPurchase {
 export const ShopPurchaseSchema = SchemaFactory.createForClass(ShopPurchase);
 
 ShopPurchaseSchema.index({ userId: 1, createdAt: -1 });
-

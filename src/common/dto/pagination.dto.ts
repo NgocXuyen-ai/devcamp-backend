@@ -2,44 +2,24 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 
-const DEFAULT_PAGE = 1;
-const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 100;
-
-const toInt = (value: unknown, fallback: number): number => {
-  const parsed = parseInt(String(value), 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
-
-/**
- * Base query DTO that adds `page` / `limit` (and a derived `skip`)
- * to any list endpoint. Extend it in feature filter DTOs.
- */
 export class PaginationDto {
-  @ApiPropertyOptional({ minimum: 1, default: DEFAULT_PAGE })
+  @ApiPropertyOptional({ minimum: 1, default: 1 })
   @IsOptional()
-  @Transform(({ value }) => toInt(value, DEFAULT_PAGE))
+  @Transform(({ value }) => parseInt(String(value), 10))
   @IsInt()
   @Min(1)
-  page?: number = DEFAULT_PAGE;
+  page?: number = 1;
 
-  @ApiPropertyOptional({
-    minimum: 1,
-    maximum: MAX_LIMIT,
-    default: DEFAULT_LIMIT,
-  })
+  @ApiPropertyOptional({ minimum: 1, maximum: 100, default: 20 })
   @IsOptional()
-  @Transform(({ value }) => toInt(value, DEFAULT_LIMIT))
+  @Transform(({ value }) => parseInt(String(value), 10))
   @IsInt()
   @Min(1)
-  @Max(MAX_LIMIT)
-  limit?: number = DEFAULT_LIMIT;
+  @Max(100)
+  limit?: number = 20;
 
-  /** Mongo skip offset derived from page + limit. */
   get skip(): number {
-    const page = this.page ?? DEFAULT_PAGE;
-    const limit = this.limit ?? DEFAULT_LIMIT;
-    return (page - 1) * limit;
+    return ((this.page ?? 1) - 1) * (this.limit ?? 20);
   }
 }
 
@@ -49,26 +29,19 @@ export interface PaginatedResult<T> {
   page: number;
   limit: number;
   totalPages: number;
-  hasNextPage: boolean;
-  hasPrevPage: boolean;
 }
 
-/** Wraps a page of items in the standard pagination envelope. */
 export function paginate<T>(
   items: T[],
   total: number,
-  page = DEFAULT_PAGE,
-  limit = DEFAULT_LIMIT,
+  page: number,
+  limit: number,
 ): PaginatedResult<T> {
-  const safeLimit = limit > 0 ? limit : DEFAULT_LIMIT;
-  const totalPages = Math.max(1, Math.ceil(total / safeLimit));
   return {
     items,
     total,
     page,
-    limit: safeLimit,
-    totalPages,
-    hasNextPage: page < totalPages,
-    hasPrevPage: page > 1,
+    limit,
+    totalPages: Math.ceil(total / limit) || 0,
   };
 }

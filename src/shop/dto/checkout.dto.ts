@@ -1,4 +1,10 @@
-import { IsArray, IsMongoId, IsInt, Min, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsMongoId,
+  IsInt,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CheckoutLineDto {
@@ -16,4 +22,3 @@ export class CheckoutDto {
   @Type(() => CheckoutLineDto)
   items!: CheckoutLineDto[];
 }
-

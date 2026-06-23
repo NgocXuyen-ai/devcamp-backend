@@ -13,7 +13,10 @@ import {
   ShopInventoryItem,
   ShopInventoryDocument,
 } from './schemas/shop-inventory.schema';
-import { ShopPurchase, ShopPurchaseDocument } from './schemas/shop-purchase.schema';
+import {
+  ShopPurchase,
+  ShopPurchaseDocument,
+} from './schemas/shop-purchase.schema';
 import { ShopCoupon, ShopCouponDocument } from './schemas/shop-coupon.schema';
 import {
   ShopCouponRedemption,
@@ -32,7 +35,8 @@ type ListItemsQuery = {
 export class ShopService implements OnModuleInit {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-    @InjectModel(ShopItem.name) private readonly itemModel: Model<ShopItemDocument>,
+    @InjectModel(ShopItem.name)
+    private readonly itemModel: Model<ShopItemDocument>,
     @InjectModel(ShopInventoryItem.name)
     private readonly inventoryModel: Model<ShopInventoryDocument>,
     @InjectModel(ShopPurchase.name)
@@ -40,7 +44,7 @@ export class ShopService implements OnModuleInit {
     @InjectModel(ShopCoupon.name)
     private readonly couponModel: Model<ShopCouponDocument>,
     @InjectModel(ShopCouponRedemption.name)
-    private readonly redemptionModel: Model<ShopCouponRedemptionDocument>
+    private readonly redemptionModel: Model<ShopCouponRedemptionDocument>,
   ) {}
 
   async onModuleInit() {
@@ -140,7 +144,8 @@ export class ShopService implements OnModuleInit {
   }
 
   private toObjectId(id: string) {
-    if (!Types.ObjectId.isValid(id)) throw new BadRequestException('Invalid id');
+    if (!Types.ObjectId.isValid(id))
+      throw new BadRequestException('Invalid id');
     return new Types.ObjectId(id);
   }
 
@@ -201,10 +206,7 @@ export class ShopService implements OnModuleInit {
   async claimDailyReward(userId: Types.ObjectId) {
     const user = await this.getOrCreateUserDemo(userId);
     const lastClaim = user.gamification?.lastDailyClaimAt;
-    if (
-      lastClaim &&
-      Date.now() - new Date(lastClaim).getTime() < ONE_DAY_MS
-    ) {
+    if (lastClaim && Date.now() - new Date(lastClaim).getTime() < ONE_DAY_MS) {
       throw new BadRequestException('Bạn đã nhận thưởng hôm nay rồi.');
     }
 
@@ -226,7 +228,7 @@ export class ShopService implements OnModuleInit {
       throw new BadRequestException('Mã đã hết hạn.');
     }
 
-    const couponId = coupon._id as Types.ObjectId;
+    const couponId = coupon._id;
 
     // chặn reuse theo user
     const already = await this.redemptionModel
@@ -238,13 +240,17 @@ export class ShopService implements OnModuleInit {
     await this.redemptionModel.create({ couponId, userId });
 
     const user = await this.getOrCreateUserDemo(userId);
-    user.gamification.coins = (user.gamification.coins ?? 0) + coupon.coinsBonus;
+    user.gamification.coins =
+      (user.gamification.coins ?? 0) + coupon.coinsBonus;
     await user.save();
 
     return { coins: user.gamification.coins, bonus: coupon.coinsBonus };
   }
 
-  async checkout(userId: Types.ObjectId, items: { itemId: string; quantity: number }[]) {
+  async checkout(
+    userId: Types.ObjectId,
+    items: { itemId: string; quantity: number }[],
+  ) {
     if (!items || items.length === 0) {
       throw new BadRequestException('Giỏ hàng trống.');
     }
@@ -255,7 +261,7 @@ export class ShopService implements OnModuleInit {
     }));
 
     const uniqueItemIds = [...new Set(parsed.map((x) => String(x.itemId)))].map(
-      (x) => new Types.ObjectId(x)
+      (x) => new Types.ObjectId(x),
     );
 
     const dbItems = await this.itemModel
@@ -283,7 +289,7 @@ export class ShopService implements OnModuleInit {
 
     const totalCoins = purchaseLines.reduce(
       (sum, l) => sum + l.unitPriceCoins * l.quantity,
-      0
+      0,
     );
 
     const user = await this.getOrCreateUserDemo(userId);
@@ -322,7 +328,9 @@ export class ShopService implements OnModuleInit {
 
   async useInventoryItem(userId: Types.ObjectId, inventoryId: string) {
     const invId = this.toObjectId(inventoryId);
-    const inv = await this.inventoryModel.findOne({ _id: invId, userId }).exec();
+    const inv = await this.inventoryModel
+      .findOne({ _id: invId, userId })
+      .exec();
     if (!inv) throw new NotFoundException('Không tìm thấy item trong kho.');
     if (inv.quantity <= 0) throw new BadRequestException('Item đã hết.');
 

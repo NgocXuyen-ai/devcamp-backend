@@ -1,10 +1,18 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  Min,
+} from 'class-validator';
 import { DisciplineLevel } from '../../common/enums';
 
-/** Onboarding / settings: study schedule + discipline configuration. */
 export class UpdatePreferencesDto {
-  @ApiPropertyOptional({ minimum: 1, maximum: 24 })
+  @ApiPropertyOptional({ minimum: 0.5, maximum: 24 })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -14,6 +22,9 @@ export class UpdatePreferencesDto {
   @ApiPropertyOptional({ example: '20:00-22:00' })
   @IsOptional()
   @IsString()
+  @Matches(/^\d{2}:\d{2}-\d{2}:\d{2}$/, {
+    message: 'focusTimeWindow must look like "HH:MM-HH:MM"',
+  })
   focusTimeWindow?: string;
 
   @ApiPropertyOptional({ enum: DisciplineLevel })
@@ -23,6 +34,6 @@ export class UpdatePreferencesDto {
 
   @ApiPropertyOptional({ enum: ['battle', 'project'] })
   @IsOptional()
-  @IsString()
-  milestoneTestPreference?: string;
+  @IsIn(['battle', 'project'])
+  milestoneTestPreference?: 'battle' | 'project';
 }

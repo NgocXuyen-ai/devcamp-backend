@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
+import { Types } from 'mongoose';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { AuthenticatedUser } from '../common/decorators/current-user.decorator';
+import { JwtPayload } from './service/auth-core.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
@@ -10,15 +13,17 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey:
-        configService.get<string>('JWT_SECRET') || 'MÃ_BẢO_MẬT_MẶC_ĐỊNH',
+        configService.get<string>('auth.jwt.accessSecret') ??
+        'change-me-access',
     });
   }
 
-  async validate(payload: { sub: string; email: string; role: string }) {
-    return Promise.resolve({
-      userId: payload.sub,
+  validate(payload: JwtPayload): AuthenticatedUser {
+    return {
+      userId: new Types.ObjectId(payload.sub),
       email: payload.email,
+      username: payload.username,
       role: payload.role,
-    });
+    };
   }
 }

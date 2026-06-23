@@ -5,4 +5,3 @@ export class RedeemCouponDto {
   @Length(3, 32)
   code!: string;
 }
-

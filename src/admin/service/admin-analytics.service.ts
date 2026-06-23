@@ -7,7 +7,7 @@ import {
   SubmissionDocument,
 } from '../../exercises/schemas/submission.schema';
 import { User, UserDocument } from '../../users/schemas/users.schema';
-import { UsersService } from '../../users/users.service';
+import { UsersService } from '../../users/service/users.service';
 import {
   AnalyticsRangeDto,
   TopUsersQueryDto,

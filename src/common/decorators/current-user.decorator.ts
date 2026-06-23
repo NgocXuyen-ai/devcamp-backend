@@ -4,19 +4,18 @@ import { UserRole } from '../enums';
 
 export interface AuthenticatedUser {
   userId: Types.ObjectId;
+  email: string;
   username: string;
   role: UserRole;
-  email?: string;
-}
-
-interface AuthenticatedRequest {
-  user: AuthenticatedUser;
 }
 
 export const CurrentUser = createParamDecorator(
   (data: keyof AuthenticatedUser | undefined, ctx: ExecutionContext) => {
-    const request = ctx.switchToHttp().getRequest<AuthenticatedRequest>();
+    const request = ctx
+      .switchToHttp()
+      .getRequest<{ user?: AuthenticatedUser }>();
     const user = request.user;
-    return data ? user?.[data] : user;
+    if (!user) return undefined;
+    return data ? user[data] : user;
   },
 );

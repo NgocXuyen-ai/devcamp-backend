@@ -5,15 +5,16 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, QueryFilter, Types } from 'mongoose';
-import { DisciplineLevel, LoginProvider, UserRole } from '../common/enums';
-import { User, UserDocument } from './schemas/users.schema';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { UpdatePreferencesDto } from './dto/update-preferences.dto';
+import { LoginProvider, UserRole } from '../../common/enums';
+import { User, UserDocument } from '../schemas/users.schema';
+import { UpdateUserDto } from '../dto/update-user.dto';
+import { UpdatePreferencesDto } from '../dto/update-preferences.dto';
+import { DisciplineLevel } from '../../common/enums';
 
 export interface CreateUserInput {
   username: string;
   email: string;
-  password?: string; // already hashed, OR undefined for OAuth users
+  password?: string;
   provider?: LoginProvider;
   providerId?: string;
   avatarUrl?: string;
@@ -27,8 +28,6 @@ export class UsersService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
   ) {}
 
-  // ----- creation / lookup -----
-
   async create(input: CreateUserInput): Promise<UserDocument> {
     const exists = await this.userModel.exists({
       $or: [{ email: input.email.toLowerCase() }, { username: input.username }],
@@ -41,10 +40,6 @@ export class UsersService {
       provider: input.provider ?? LoginProvider.EMAIL,
       role: input.role ?? UserRole.USER,
     });
-  }
-
-  findAll(): Promise<UserDocument[]> {
-    return this.userModel.find().sort({ createdAt: -1 }).exec();
   }
 
   async findById(id: Types.ObjectId | string): Promise<UserDocument> {
@@ -70,8 +65,6 @@ export class UsersService {
   ): Promise<UserDocument | null> {
     return this.userModel.findOne({ provider, providerId }).exec();
   }
-
-  // ----- mutations -----
 
   async updateProfile(
     userId: Types.ObjectId,
@@ -104,9 +97,10 @@ export class UsersService {
     }
     if (dto.disciplineLevel !== undefined) {
       update['preferences.disciplineLevel'] = dto.disciplineLevel;
-      // Tự cập nhật quota max và lock time theo policy
+
       update['preferences.maxSubmitAttempts'] =
         dto.disciplineLevel === DisciplineLevel.STRICT ? 5 : 10;
+
       update['preferences.lockTimeMinutes'] =
         dto.disciplineLevel === DisciplineLevel.STRICT ? 30 : 15;
     }
@@ -187,8 +181,6 @@ export class UsersService {
       { $set: { isFirstLogin: false } },
     );
   }
-
-  // ----- queries -----
 
   async search(query: QueryFilter<UserDocument>, skip: number, limit: number) {
     const [items, total] = await Promise.all([

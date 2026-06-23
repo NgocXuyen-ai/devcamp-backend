@@ -1,5 +1,13 @@
 import { Global, Module } from '@nestjs/common';
+import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
+import { AllExceptionsFilter } from './all-exceptions.filter';
+import { TransformInterceptor } from './transform.interceptor';
 
 @Global()
-@Module({})
+@Module({
+  providers: [
+    { provide: APP_FILTER, useClass: AllExceptionsFilter },
+    { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
+  ],
+})
 export class CommonModule {}

@@ -3,7 +3,7 @@ import { QueryFilter, Types } from 'mongoose';
 import { paginate } from '../../common/dto/pagination.dto';
 import { UserRole } from '../../common/enums';
 import { UserDocument } from '../../users/schemas/users.schema';
-import { UsersService } from '../../users/users.service';
+import { UsersService } from '../../users/service/users.service';
 import {
   AdminUpdateUserDto,
   AdminUserListQueryDto,

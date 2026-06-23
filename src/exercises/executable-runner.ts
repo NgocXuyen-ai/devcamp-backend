@@ -3,7 +3,11 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import type { EvaluationMode, JudgeCaseResult, JudgeRunResult } from './judge.types';
+import type {
+  EvaluationMode,
+  JudgeCaseResult,
+  JudgeRunResult,
+} from './judge.types';
 
 const execFileAsync = promisify(execFile);
 const RESULT_PREFIX = '__CG_JUDGE__';
@@ -74,7 +78,7 @@ export async function runExecutableEvaluation(input: {
           detail: message,
         })),
       },
-      input.locale
+      input.locale,
     );
   }
 }
@@ -96,7 +100,7 @@ function isBackendExecutableTopic(topic: string) {
 
 function buildHandleRequestTestCases(
   locale: 'vi' | 'en' | undefined,
-  mode: EvaluationMode
+  mode: EvaluationMode,
 ) {
   const isVi = locale === 'vi';
   const allCases: HandleRequestTestCase[] = [
@@ -135,19 +139,23 @@ function buildHandleRequestTestCases(
       expected: isVi
         ? '`body` không được `undefined` hoặc `null`'
         : '`body` must not be `undefined` or `null`',
-      requestPayload: { method: 'POST', path: '/login', body: { user: 'demo' } },
+      requestPayload: {
+        method: 'POST',
+        path: '/login',
+        body: { user: 'demo' },
+      },
       visibility: 'full',
     },
   ];
 
   return allCases.filter((item) =>
-    mode === 'sample' ? item.visibility === 'sample' : true
+    mode === 'sample' ? item.visibility === 'sample' : true,
   );
 }
 
 async function runJavaScriptHandleRequest(
   code: string,
-  testCases: HandleRequestTestCase[]
+  testCases: HandleRequestTestCase[],
 ) {
   const workingDir = await mkdtemp(join(tmpdir(), 'cfg-js-judge-'));
   const filePath = join(workingDir, 'judge.mjs');
@@ -245,11 +253,15 @@ try {
   await writeFile(filePath, script, 'utf8');
 
   try {
-    const { stdout, stderr } = await execFileAsync(process.execPath, [filePath], {
-      cwd: workingDir,
-      timeout: EXEC_TIMEOUT_MS,
-      windowsHide: true,
-    });
+    const { stdout, stderr } = await execFileAsync(
+      process.execPath,
+      [filePath],
+      {
+        cwd: workingDir,
+        timeout: EXEC_TIMEOUT_MS,
+        windowsHide: true,
+      },
+    );
 
     return parseRunnerPayload(`${stdout}\n${stderr}`);
   } catch (error) {
@@ -261,7 +273,7 @@ try {
 
 async function runPythonHandleRequest(
   code: string,
-  testCases: HandleRequestTestCase[]
+  testCases: HandleRequestTestCase[],
 ) {
   const workingDir = await mkdtemp(join(tmpdir(), 'cfg-py-judge-'));
   const filePath = join(workingDir, 'judge.py');
@@ -394,13 +406,15 @@ function parseRunnerPayload(output: string): RunnerPayload {
 
 function normalizeExecutionError(
   error: unknown,
-  testCases: HandleRequestTestCase[]
+  testCases: HandleRequestTestCase[],
 ): RunnerPayload {
   const stderr =
     typeof error === 'object' && error !== null && 'stderr' in error
       ? String((error as { stderr?: string }).stderr ?? '')
       : '';
-  const message = stderr.trim() || (error instanceof Error ? error.message : 'Execution failed.');
+  const message =
+    stderr.trim() ||
+    (error instanceof Error ? error.message : 'Execution failed.');
   const killed =
     typeof error === 'object' && error !== null && 'killed' in error
       ? Boolean((error as { killed?: boolean }).killed)
@@ -409,11 +423,14 @@ function normalizeExecutionError(
     typeof error === 'object' && error !== null && 'signal' in error
       ? String((error as { signal?: string }).signal ?? '')
       : '';
-  const status = killed || signal === 'SIGTERM'
-    ? 'time_limit_exceeded'
-    : /SyntaxError|IndentationError|NameError: name '__future__' is not defined/i.test(message)
-      ? 'compilation_error'
-      : 'runtime_error';
+  const status =
+    killed || signal === 'SIGTERM'
+      ? 'time_limit_exceeded'
+      : /SyntaxError|IndentationError|NameError: name '__future__' is not defined/i.test(
+            message,
+          )
+        ? 'compilation_error'
+        : 'runtime_error';
 
   return {
     status,
@@ -431,7 +448,7 @@ function normalizeExecutionError(
 
 function toJudgeRunResult(
   payload: RunnerPayload,
-  locale: 'vi' | 'en' | undefined
+  locale: 'vi' | 'en' | undefined,
 ): JudgeRunResult {
   const isVi = locale === 'vi';
   const passedCount = payload.cases.filter((item) => item.passed).length;

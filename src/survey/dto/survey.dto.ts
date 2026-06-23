@@ -13,10 +13,11 @@ import {
   IsString,
   Matches,
   Max,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
-import { CareerField, DisciplineLevel, SkillLevel } from '../common/enums';
+import { CareerField, DisciplineLevel, SkillLevel } from '../../common/enums';
 
 export class CareerPathDto {
   @ApiProperty({ enum: CareerField })
@@ -46,16 +47,32 @@ export class SkillTestStartDto {
   @IsArray()
   @IsString({ each: true })
   knownLanguages?: string[];
+
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: 3,
+    default: 3,
+    description: 'Số bài coding muốn nhận (1–3)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(3)
+  questionCount?: number;
 }
 
-export class SkillTestAnswerItemDto {
+export class CodeSolutionItemDto {
   @ApiProperty()
   @IsMongoId()
   questionId!: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    description: 'JavaScript code — phải định nghĩa function solve()',
+    example: 'function solve(a, b) {\n  return a + b;\n}',
+  })
   @IsString()
-  answer!: string;
+  @MaxLength(20000)
+  code!: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -64,13 +81,13 @@ export class SkillTestAnswerItemDto {
 }
 
 export class SkillTestSubmitDto {
-  @ApiProperty({ type: [SkillTestAnswerItemDto] })
+  @ApiProperty({ type: [CodeSolutionItemDto] })
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(20)
+  @ArrayMaxSize(3)
   @ValidateNested({ each: true })
-  @Type(() => SkillTestAnswerItemDto)
-  answers!: SkillTestAnswerItemDto[];
+  @Type(() => CodeSolutionItemDto)
+  solutions!: CodeSolutionItemDto[];
 
   @ApiPropertyOptional()
   @IsOptional()

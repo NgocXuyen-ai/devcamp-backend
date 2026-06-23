@@ -35,7 +35,7 @@ export class ShopController {
   listItems(
     @Query('search') search?: string,
     @Query('category') category?: string,
-    @Query('sort') sort?: 'priceAsc' | 'priceDesc' | 'newest'
+    @Query('sort') sort?: 'priceAsc' | 'priceDesc' | 'newest',
   ) {
     return this.shopService.listItems({ search, category, sort });
   }
@@ -69,8 +69,7 @@ export class ShopController {
   useItem(@Req() req: Request, @Body() body: { inventoryId: string }) {
     return this.shopService.useInventoryItem(
       getUserIdFromReq(req),
-      body.inventoryId
+      body.inventoryId,
     );
   }
 }
-

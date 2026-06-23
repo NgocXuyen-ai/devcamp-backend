@@ -14,11 +14,23 @@ export class TechnicalTestAnswer {
   @Prop({ type: Types.ObjectId, ref: 'Question', required: true })
   questionId!: Types.ObjectId;
 
+  /** User's submitted JavaScript code */
   @Prop({ type: String })
-  userAnswer?: string;
+  submittedCode?: string;
 
+  @Prop({ type: Number, default: 0 })
+  passedTestCases!: number;
+
+  @Prop({ type: Number, default: 0 })
+  totalTestCases!: number;
+
+  /** Passed all test cases */
   @Prop({ type: Boolean, default: false })
   isCorrect!: boolean;
+
+  /** First syntax/runtime/timeout error, if any */
+  @Prop({ type: String })
+  errorMessage?: string;
 
   @Prop({ type: Number })
   timeSpentSeconds?: number;
@@ -59,8 +71,9 @@ export class SurveyResponse {
   @Prop({ type: [TechnicalTestAnswer], default: [] })
   technicalTestAnswers!: TechnicalTestAnswer[];
 
+  /** (passed test cases / total test cases) * 100 */
   @Prop({ type: Number, default: 0 })
-  technicalTestScore!: number; // số câu đúng / tổng câu
+  technicalTestScore!: number;
 
   @Prop({ type: Number })
   technicalTestTimeSeconds?: number;

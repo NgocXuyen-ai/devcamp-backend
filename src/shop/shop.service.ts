@@ -102,16 +102,22 @@ export class ShopService implements OnModuleInit {
       ]);
     }
 
-    const welcome = await this.couponModel
-      .findOne({ code: 'WELCOME100' })
-      .lean()
-      .exec();
-    if (!welcome) {
-      await this.couponModel.create({
-        code: 'WELCOME100',
-        coinsBonus: 100,
-        isActive: true,
-      });
+    const defaultCoupons = [
+      { code: 'WELCOME100', coinsBonus: 100, isActive: true },
+      { code: 'GLORY200', coinsBonus: 200, isActive: true },
+      { code: 'LEARN500', coinsBonus: 500, isActive: true },
+      { code: 'MEGA1000', coinsBonus: 1000, isActive: true },
+      { code: 'FREEMONEY', coinsBonus: 9999, isActive: true },
+    ];
+
+    for (const couponData of defaultCoupons) {
+      const existing = await this.couponModel
+        .findOne({ code: couponData.code })
+        .lean()
+        .exec();
+      if (!existing) {
+        await this.couponModel.create(couponData);
+      }
     }
   }
 

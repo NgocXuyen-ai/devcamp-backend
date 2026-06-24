@@ -2,12 +2,14 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { FriendRequest, FriendRequestDocument } from './schemas/friend-request.schema';
+import { DirectMessage, DirectMessageDocument } from './schemas/direct-message.schema';
 import { User, UserDocument } from '../users/schemas/users.schema';
 
 @Injectable()
 export class SocialService {
   constructor(
     @InjectModel(FriendRequest.name) private friendRequestModel: Model<FriendRequestDocument>,
+    @InjectModel(DirectMessage.name) private directMessageModel: Model<DirectMessageDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
   ) {}
 
@@ -103,7 +105,38 @@ export class SocialService {
       .populate('followers', 'username avatarUrl')
       .populate('following', 'username avatarUrl');
     
+    
     if (!user) throw new NotFoundException("User not found");
     return user;
+  }
+
+  async sendDirectMessage(senderId: string, receiverId: string, body: string) {
+    const message = new this.directMessageModel({ senderId, receiverId, body });
+    await message.save();
+    return this.directMessageModel.findById(message._id).populate('senderId', 'username avatarUrl role fieldFocus');
+  }
+
+  async getDirectMessages(userId1: string, userId2: string) {
+    return this.directMessageModel.find({
+      $or: [
+        { senderId: userId1, receiverId: userId2 },
+        { senderId: userId2, receiverId: userId1 }
+      ]
+    })
+    .sort({ createdAt: 1 })
+    .populate('senderId', 'username avatarUrl role fieldFocus');
+  }
+
+  async searchUsers(query: string) {
+    if (!query || query.trim().length === 0) return [];
+    
+    let queryFilter: any = { username: new RegExp(query, 'i') };
+    if (Types.ObjectId.isValid(query)) {
+      queryFilter = { $or: [{ _id: query }, { username: new RegExp(query, 'i') }] };
+    }
+    
+    return this.userModel.find(queryFilter)
+      .select('username avatarUrl role fieldFocus followers friends')
+      .limit(10);
   }
 }

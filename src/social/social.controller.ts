@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Req, Query } from '@nestjs/common';
 import { SocialService } from './social.service';
 
 // Assuming there's a guard to get req.user (which should have _id)
@@ -54,5 +54,22 @@ export class SocialController {
   @Get('profile/:userId')
   getUserProfile(@Param('userId') userId: string) {
     return this.socialService.getUserProfile(userId);
+  }
+
+  @Post('dm/:receiverId')
+  sendDirectMessage(@Req() req: any, @Param('receiverId') receiverId: string, @Body('body') body: string) {
+    const senderId = req.headers['x-user-id'] || req.user?.sub || req.user?._id;
+    return this.socialService.sendDirectMessage(senderId, receiverId, body);
+  }
+
+  @Get('dm/:userId2')
+  getDirectMessages(@Req() req: any, @Param('userId2') userId2: string) {
+    const userId1 = req.headers['x-user-id'] || req.user?.sub || req.user?._id;
+    return this.socialService.getDirectMessages(userId1, userId2);
+  }
+
+  @Get('search')
+  searchUsers(@Query('query') query: string) {
+    return this.socialService.searchUsers(query);
   }
 }

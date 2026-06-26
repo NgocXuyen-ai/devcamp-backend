@@ -15,10 +15,10 @@ import { GetHistoryDto } from './dto/get-history.dto';
 import { GetLeaderboardDto } from './dto/get-leaderboard.dto';
 import { SubmitAnswerDto } from './dto/submit-answer.dto';
 
-import { MockAuthGuard } from './mocks/mock-auth.guard';
-import { CurrentUser } from './mocks/current-user.decorrator';
+import { JwtAuthGuard } from '../common/guard/jwt-auth.guard';
+import { CurrentUser } from './decorators/current-user.decorator';
 @Controller('battles')
-@UseGuards(MockAuthGuard)
+@UseGuards(JwtAuthGuard)
 export class BattlesController {
   constructor(private readonly battlesService: BattlesService) {}
 
@@ -43,31 +43,48 @@ export class BattlesController {
     return this.battlesService.getLeaderboard(dto);
   }
 
-  @Post(':id/submit')
+  @Post(':battleId/submit')
   submit(
-    @Param('id') id: string,
+    @Param('battleId') battleId: string, // khớp
     @CurrentUser() user: { userId: string },
     @Body() dto: SubmitAnswerDto,
   ) {
-    return this.battlesService.submitAnswer(id, user.userId, dto);
+    return this.battlesService.submitAnswer(battleId, user.userId, dto);
   }
 
-  @Get(':id/submissions')
-  submissions(@Param('id') id: string, @Query('userId') userId?: string) {
-    return this.battlesService.getSubmissions(id, userId);
+  @Get(':battleId/submissions')
+  submissions(
+    @Param('battleId') battleId: string,
+    @Query('userId') userId?: string,
+  ) {
+    return this.battlesService.getSubmissions(battleId, userId);
   }
 
-  @Post(':id/end') end(@Param('id') id: string) {
-    return this.battlesService.endBattle(id);
+  @Post(':battleId/end')
+  end(@Param('battleId') battleId: string) {
+    return this.battlesService.endBattle(battleId);
   }
 
-  @Post(':id/abandon')
-  abandon(@Param('id') id: string, @CurrentUser() user: { userId: string }) {
-    return this.battlesService.abandonBattle(id, user.userId);
+  @Post(':battleId/abandon')
+  abandon(
+    @Param('battleId') battleId: string,
+    @CurrentUser() user: { userId: string },
+  ) {
+    return this.battlesService.abandonBattle(battleId, user.userId);
+  }
+  @Post(':battleId/cancel-match')
+  cancelMatch(
+    @Param('battleId') battleId: string,
+    @CurrentUser() user: { userId: string },
+  ) {
+    return this.battlesService.cancelMatchmaking(battleId, user.userId);
   }
 
-  @Get(':id')
-  getOne(@Param('id') id: string, @CurrentUser() user: { userId: string }) {
-    return this.battlesService.getBattleById(id, user.userId);
+  @Get(':battleId')
+  getOne(
+    @Param('battleId') battleId: string,
+    @CurrentUser() user: { userId: string },
+  ) {
+    return this.battlesService.getBattleById(battleId, user.userId);
   }
 }

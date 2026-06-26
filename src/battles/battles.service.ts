@@ -59,7 +59,8 @@ export class BattlesService {
     });
 
     if (battle.status === BattleStatus.IN_PROGRESS) {
-      this.startBattleTimer(String(battle._id), battle.timeLimitSeconds);
+      // this.startBattleTimer(String(battle._id), battle.timeLimit);
+      this.gateway.notifyBattleStarted(String(battle._id), battle);
     }
     return battle;
   }
@@ -208,6 +209,7 @@ export class BattlesService {
         userId,
         questionId: dto.questionId,
         questionOrder,
+        currentScore: newScore,
       });
     }
 
@@ -358,6 +360,43 @@ export class BattlesService {
       message: 'Battle abandoned',
       winnerId: opponent?.userId.toString(),
     };
+  }
+
+  async cancelMatchmaking(battleId: string, userId: string) {
+    if (!Types.ObjectId.isValid(battleId)) {
+      throw new NotFoundException('Battle not found');
+    }
+
+    const battle = await this.battleModel.findById(battleId).lean();
+    if (!battle) {
+      throw new NotFoundException('Battle not found');
+    }
+
+    const isPlayer = battle.players.some((p) => p.userId.toString() === userId);
+    if (!isPlayer) {
+      throw new ForbiddenException('You are not a player of this battle');
+    }
+
+    if (battle.status !== BattleStatus.WAITING) {
+      throw new BadRequestException(
+        'Battle is no longer waiting — an opponent may already be matched',
+      );
+    }
+
+    // Atomic: chỉ cancel nếu status vẫn còn WAITING ngay tại thời điểm update
+    const cancelled = await this.battleModel.findOneAndUpdate(
+      { _id: battleId, status: BattleStatus.WAITING },
+      { $set: { status: BattleStatus.CANCELLED, endTime: new Date() } },
+      { new: true },
+    );
+
+    if (!cancelled) {
+      throw new BadRequestException(
+        'Battle is no longer waiting — an opponent may already be matched',
+      );
+    }
+
+    return { message: 'Matchmaking cancelled', battleId };
   }
 
   private async updateRankings(

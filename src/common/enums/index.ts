@@ -75,6 +75,7 @@ export enum BattleStatus {
   IN_PROGRESS = 'in_progress',
   FINISHED = 'finished',
   CANCELLED = 'cancelled',
+  COMPLETED = 'completed',
 }
 
 export enum BattleResult {

@@ -39,9 +39,14 @@ export class BattlesGateway implements OnGatewayDisconnect {
       userId: string;
       questionId: string;
       questionOrder: number;
+      currentScore: number;
     },
   ) {
     this.server.to(battleId).emit('opponent-correct', payload);
+  }
+
+  notifyBattleStarted(battleId: string, battle: unknown) {
+    this.server.to(battleId).emit('battle-started', battle);
   }
 
   notifyBattleEnded(

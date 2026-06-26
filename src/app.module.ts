@@ -27,6 +27,8 @@ import { SurveyModule } from './survey/survey.module';
 import { AdminModule } from './admin/admin.module';
 import { CommonModule } from './common/common.module';
 import { ShopModule } from './shop/shop.module';
+import { ForumModule } from './forum/forum.module';
+import { SocialModule } from './social/social.module';
 
 let memoryMongoServer: MongoMemoryServer | null = null;
 const persistentMongoPath = join(process.cwd(), '.local-data', 'mongodb');
@@ -62,8 +64,8 @@ const persistentMongoPath = join(process.cwd(), '.local-data', 'mongodb');
         return {
           uri,
           dbName: 'code-for-glory',
-          retryAttempts: 0,
-          serverSelectionTimeoutMS: 1000,
+          retryAttempts: 2,
+          serverSelectionTimeoutMS: 10000,
           connectionFactory: (connection: Connection) => {
             // Factory is called after the connection is established,
             // so log immediately instead of waiting for the 'connected' event
@@ -104,6 +106,8 @@ const persistentMongoPath = join(process.cwd(), '.local-data', 'mongodb');
     SurveyModule,
     AdminModule,
     ShopModule,
+    ForumModule,
+    SocialModule,
   ],
 })
 export class AppModule implements OnApplicationShutdown {

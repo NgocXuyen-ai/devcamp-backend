@@ -1,20 +1,22 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ForumService } from './forum.service';
 import { ForumController } from './forum.controller';
-import { Post, PostSchema } from './schemas/post.schema';
-import { Comment, CommentSchema } from './schemas/comment.schema';
-import { User, UserSchema } from '../users/schemas/users.schema';
+import { ForumService } from './forum.service';
+import { ForumPost, ForumPostSchema } from './schemas/forum-post.schema';
+import {
+  ForumComment,
+  ForumCommentSchema,
+} from './schemas/forum-comment.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
-      { name: Post.name, schema: PostSchema },
-      { name: Comment.name, schema: CommentSchema },
-      { name: User.name, schema: UserSchema },
+      { name: ForumPost.name, schema: ForumPostSchema },
+      { name: ForumComment.name, schema: ForumCommentSchema },
     ]),
   ],
   controllers: [ForumController],
   providers: [ForumService],
+  exports: [ForumService],
 })
 export class ForumModule {}

@@ -1,95 +1,184 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Post, PostDocument } from './schemas/post.schema';
-import { Comment, CommentDocument } from './schemas/comment.schema';
+import { ForumPost, ForumPostDocument } from './schemas/forum-post.schema';
+import {
+  ForumComment,
+  ForumCommentDocument,
+} from './schemas/forum-comment.schema';
+import { Reaction } from './schemas/reaction.schema';
+
+/** Public author fields surfaced to the client (matches FE ForumUser). */
+const AUTHOR_FIELDS =
+  'username avatarUrl role fieldFocus selfAssessedLevel gamification createdAt';
+
+interface ShapeablePost {
+  _id: Types.ObjectId | string;
+  channelId: string;
+  authorId: unknown;
+  body: string;
+  createdAt?: Date;
+  reactions?: Reaction[];
+  replyCount?: number;
+}
+
+interface ShapeableComment {
+  _id: Types.ObjectId | string;
+  postId: Types.ObjectId | string;
+  authorId: unknown;
+  body: string;
+  createdAt?: Date;
+  reactions?: Reaction[];
+}
 
 @Injectable()
 export class ForumService {
   constructor(
-    @InjectModel(Post.name) private postModel: Model<PostDocument>,
-    @InjectModel(Comment.name) private commentModel: Model<CommentDocument>,
+    @InjectModel(ForumPost.name)
+    private readonly postModel: Model<ForumPostDocument>,
+    @InjectModel(ForumComment.name)
+    private readonly commentModel: Model<ForumCommentDocument>,
   ) {}
 
-  async createPost(authorId: string, channelId: string, body: string) {
-    const post = new this.postModel({ author: authorId, channelId, body });
-    await post.save();
-    return this.postModel.findById(post._id).populate('author', 'username avatarUrl role fieldFocus gamification');
+  /** Map stored reactions ({emoji, users[]}) into the FE shape ({emoji,count,users}). */
+  private shapeReactions(reactions: Reaction[] = []) {
+    return reactions.map((r) => ({
+      emoji: r.emoji,
+      count: r.users?.length ?? 0,
+      users: (r.users ?? []).map((u) => String(u)),
+    }));
+  }
+
+  private shapePost(doc: ShapeablePost) {
+    return {
+      _id: String(doc._id),
+      channelId: doc.channelId,
+      author: doc.authorId,
+      body: doc.body,
+      createdAt: doc.createdAt,
+      reactions: this.shapeReactions(doc.reactions ?? []),
+      replyCount: doc.replyCount ?? 0,
+    };
+  }
+
+  private shapeComment(doc: ShapeableComment) {
+    return {
+      _id: String(doc._id),
+      postId: String(doc.postId),
+      author: doc.authorId,
+      body: doc.body,
+      createdAt: doc.createdAt,
+      reactions: this.shapeReactions(doc.reactions ?? []),
+    };
   }
 
   async getPosts(channelId: string) {
-    return this.postModel.find({ channelId })
+    const filter = channelId ? { channelId } : {};
+    const posts = await this.postModel
+      .find(filter)
       .sort({ createdAt: -1 })
-      .populate('author', 'username avatarUrl role fieldFocus gamification');
+      .populate('authorId', AUTHOR_FIELDS)
+      .lean();
+    return posts.map((p) => this.shapePost(p as unknown as ShapeablePost));
   }
 
-  async reactToPost(postId: string, userId: string, emoji: string) {
-    const post = await this.postModel.findById(postId);
-    if (!post) throw new NotFoundException('Post not found');
-
-    const reactionIndex = post.reactions.findIndex(r => r.emoji === emoji);
-    const userIdObj = new Types.ObjectId(userId);
-
-    if (reactionIndex > -1) {
-      const userIndex = post.reactions[reactionIndex].users.findIndex(u => u.equals(userIdObj));
-      if (userIndex > -1) {
-        // User already reacted, remove reaction
-        post.reactions[reactionIndex].users.splice(userIndex, 1);
-        post.reactions[reactionIndex].count -= 1;
-        if (post.reactions[reactionIndex].count === 0) {
-          post.reactions.splice(reactionIndex, 1);
-        }
-      } else {
-        post.reactions[reactionIndex].users.push(userIdObj);
-        post.reactions[reactionIndex].count += 1;
-      }
-    } else {
-      post.reactions.push({ emoji, count: 1, users: [userIdObj] });
-    }
-
-    await post.save();
-    return post;
-  }
-
-  async createComment(postId: string, authorId: string, body: string) {
-    const comment = new this.commentModel({ postId, author: authorId, body });
-    await comment.save();
-
-    await this.postModel.findByIdAndUpdate(postId, { $inc: { replyCount: 1 } });
-    
-    return this.commentModel.findById(comment._id).populate('author', 'username avatarUrl role fieldFocus gamification');
+  async createPost(userId: Types.ObjectId, channelId: string, body: string) {
+    const created = await this.postModel.create({
+      channelId,
+      authorId: userId,
+      body,
+    });
+    const populated = await created.populate('authorId', AUTHOR_FIELDS);
+    return this.shapePost(populated.toObject());
   }
 
   async getComments(postId: string) {
-    return this.commentModel.find({ postId })
+    if (!Types.ObjectId.isValid(postId)) {
+      throw new NotFoundException('Post not found');
+    }
+    const comments = await this.commentModel
+      .find({ postId: new Types.ObjectId(postId) })
       .sort({ createdAt: 1 })
-      .populate('author', 'username avatarUrl role fieldFocus gamification');
+      .populate('authorId', AUTHOR_FIELDS)
+      .lean();
+    return comments.map((c) =>
+      this.shapeComment(c as unknown as ShapeableComment),
+    );
   }
 
-  async reactToComment(commentId: string, userId: string, emoji: string) {
+  async createComment(userId: Types.ObjectId, postId: string, body: string) {
+    if (!Types.ObjectId.isValid(postId)) {
+      throw new NotFoundException('Post not found');
+    }
+    const post = await this.postModel.findById(postId);
+    if (!post) throw new NotFoundException('Post not found');
+
+    const created = await this.commentModel.create({
+      postId: post._id,
+      authorId: userId,
+      body,
+    });
+    await this.postModel.updateOne(
+      { _id: post._id },
+      { $inc: { replyCount: 1 } },
+    );
+
+    const populated = await created.populate('authorId', AUTHOR_FIELDS);
+    return this.shapeComment(populated.toObject());
+  }
+
+  async reactToPost(userId: Types.ObjectId, postId: string, emoji: string) {
+    if (!Types.ObjectId.isValid(postId)) {
+      throw new NotFoundException('Post not found');
+    }
+    const post = await this.postModel.findById(postId);
+    if (!post) throw new NotFoundException('Post not found');
+
+    this.toggleReaction(post.reactions, userId, emoji);
+    await post.save();
+
+    const populated = await post.populate('authorId', AUTHOR_FIELDS);
+    return this.shapePost(populated.toObject());
+  }
+
+  async reactToComment(
+    userId: Types.ObjectId,
+    commentId: string,
+    emoji: string,
+  ) {
+    if (!Types.ObjectId.isValid(commentId)) {
+      throw new NotFoundException('Comment not found');
+    }
     const comment = await this.commentModel.findById(commentId);
     if (!comment) throw new NotFoundException('Comment not found');
 
-    const reactionIndex = comment.reactions.findIndex(r => r.emoji === emoji);
-    const userIdObj = new Types.ObjectId(userId);
+    this.toggleReaction(comment.reactions, userId, emoji);
+    await comment.save();
 
-    if (reactionIndex > -1) {
-      const userIndex = comment.reactions[reactionIndex].users.findIndex(u => u.equals(userIdObj));
-      if (userIndex > -1) {
-        comment.reactions[reactionIndex].users.splice(userIndex, 1);
-        comment.reactions[reactionIndex].count -= 1;
-        if (comment.reactions[reactionIndex].count === 0) {
-          comment.reactions.splice(reactionIndex, 1);
-        }
-      } else {
-        comment.reactions[reactionIndex].users.push(userIdObj);
-        comment.reactions[reactionIndex].count += 1;
+    const populated = await comment.populate('authorId', AUTHOR_FIELDS);
+    return this.shapeComment(populated.toObject());
+  }
+
+  /** Add the user to the emoji reaction, or remove them if already reacted. */
+  private toggleReaction(
+    reactions: Reaction[],
+    userId: Types.ObjectId,
+    emoji: string,
+  ) {
+    let reaction = reactions.find((r) => r.emoji === emoji);
+    if (!reaction) {
+      reaction = { emoji, users: [] };
+      reactions.push(reaction);
+    }
+    const idx = reaction.users.findIndex((u) => String(u) === String(userId));
+    if (idx >= 0) {
+      reaction.users.splice(idx, 1);
+      if (reaction.users.length === 0) {
+        const ri = reactions.findIndex((r) => r.emoji === emoji);
+        if (ri >= 0) reactions.splice(ri, 1);
       }
     } else {
-      comment.reactions.push({ emoji, count: 1, users: [userIdObj] });
+      reaction.users.push(userId);
     }
-
-    await comment.save();
-    return comment;
   }
 }

@@ -27,6 +27,9 @@ import { SurveyModule } from './survey/survey.module';
 import { AdminModule } from './admin/admin.module';
 import { CommonModule } from './common/common.module';
 import { ShopModule } from './shop/shop.module';
+import { ForumModule } from './forum/forum.module';
+import { SocialModule } from './social/social.module';
+import { CodeAnalysisModule } from './code-analysis/code-analysis.module';
 
 let memoryMongoServer: MongoMemoryServer | null = null;
 const persistentMongoPath = join(process.cwd(), '.local-data', 'mongodb');
@@ -104,6 +107,9 @@ const persistentMongoPath = join(process.cwd(), '.local-data', 'mongodb');
     SurveyModule,
     AdminModule,
     ShopModule,
+    ForumModule,
+    SocialModule,
+    CodeAnalysisModule,
   ],
 })
 export class AppModule implements OnApplicationShutdown {

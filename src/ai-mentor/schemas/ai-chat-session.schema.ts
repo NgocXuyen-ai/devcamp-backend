@@ -4,19 +4,6 @@ import { AIMentorStyle, AIMentorTone } from '../../common/enums';
 
 export type AiChatSessionDocument = HydratedDocument<AiChatSession>;
 
-/**
- * AI Chat Session — one conversation between a user and AI Mentor,
- * scoped to a lesson, exercise, or battle.
- *
- * Style is constrained per survey "Bị stuck thì AI hỗ trợ thế nào":
- *   52.9% — INDIRECT (chỉ đặt câu hỏi gợi mở, không cho đáp án)
- *   17.6% — STEP_BY_STEP
- *   23.5% — CONCEPT_EXPLANATION
- *    5.9% — DIRECT
- *
- * Doc cũng quy định: "AI chỉ được đưa ra gợi ý và giải thích lỗi
- * logic trong 1-2 dòng, không cung cấp code trực tiếp".
- */
 @Schema({ timestamps: true })
 export class AiChatSession {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })

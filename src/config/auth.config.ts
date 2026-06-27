@@ -15,6 +15,10 @@ export default registerAs('auth', () => ({
   },
   login: {
     maxAttempts: parseInt(process.env.LOGIN_MAX_ATTEMPTS ?? '5', 10),
+    // CAPTCHA gating is opt-in: only enable once a real CAPTCHA provider and a
+    // frontend widget exist, otherwise it would lock users out with no way to
+    // pass the challenge.
+    captchaEnabled: process.env.LOGIN_CAPTCHA_ENABLED === 'true',
     captchaThreshold: parseInt(process.env.LOGIN_CAPTCHA_THRESHOLD ?? '3', 10),
     lockMinutes: parseInt(process.env.LOGIN_LOCK_MINUTES ?? '15', 10),
     countWindowMinutes: parseInt(

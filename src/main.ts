@@ -1,14 +1,47 @@
-import { ValidationPipe } from '@nestjs/common';
+import {
+  BadRequestException,
+  ValidationError,
+  ValidationPipe,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
+/** Collect every human-readable constraint message, including nested ones. */
+function flattenValidationMessages(errors: ValidationError[]): string[] {
+  const messages: string[] = [];
+  for (const error of errors) {
+    if (error.constraints) {
+      messages.push(...Object.values(error.constraints));
+    }
+    if (error.children?.length) {
+      messages.push(...flattenValidationMessages(error.children));
+    }
+  }
+  return messages;
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
 
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      // Return a single readable sentence instead of the default array, so the
+      // client can show the error text directly instead of a bare status code.
+      exceptionFactory: (errors: ValidationError[]) => {
+        const messages = flattenValidationMessages(errors);
+        return new BadRequestException({
+          message: messages[0] ?? 'Invalid request data',
+          code: 'VALIDATION_ERROR',
+          details: messages,
+        });
+      },
+    }),
+  );
   app.setGlobalPrefix(config.get<string>('app.apiPrefix', 'api'));
 
   const corsOrigin = config.get<string>('app.corsOrigin', '*');

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -52,6 +53,8 @@ function sha256(value: string): string {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly users: UsersService,
     private readonly attempts: LoginAttemptService,
@@ -99,11 +102,19 @@ export class AuthService {
       });
     }
 
-    // 2. CAPTCHA requirement
-    const needCaptcha = await this.attempts.shouldRequireCaptcha(email);
+    // 2. CAPTCHA requirement — only enforced when a real CAPTCHA provider is
+    //    configured. Otherwise enforcing it would permanently block legitimate
+    //    users (no widget to solve the challenge); the account lock below is the
+    //    actual brute-force protection.
+    const captchaEnabled = this.config.get<boolean>(
+      'auth.login.captchaEnabled',
+      false,
+    );
+    const needCaptcha =
+      captchaEnabled && (await this.attempts.shouldRequireCaptcha(email));
     if (needCaptcha && !dto.captchaToken) {
       throw new BadRequestException({
-        message: 'CAPTCHA verification required',
+        message: 'Too many attempts. Please complete the CAPTCHA to continue.',
         code: 'CAPTCHA_REQUIRED',
       });
     }
@@ -306,7 +317,13 @@ export class AuthService {
       user.email,
       OtpPurpose.PASSWORD_RESET,
     );
-    await this.mail.sendOtpEmail(user.email, code).catch(() => undefined);
+    // Don't swallow the failure silently — otherwise a misconfigured SMTP looks
+    // like "no email ever arrives" with nothing in the logs to explain it.
+    await this.mail.sendOtpEmail(user.email, code).catch((err: unknown) => {
+      this.logger.error(
+        `Failed to send password-reset OTP to ${user.email}: ${(err as Error).message}`,
+      );
+    });
     return { sent: true };
   }
 

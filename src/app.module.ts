@@ -29,6 +29,7 @@ import { CommonModule } from './common/common.module';
 import { ShopModule } from './shop/shop.module';
 import { ForumModule } from './forum/forum.module';
 import { SocialModule } from './social/social.module';
+import { FooterModule } from './footer/footer.module';
 
 let memoryMongoServer: MongoMemoryServer | null = null;
 const persistentMongoPath = join(process.cwd(), '.local-data', 'mongodb');
@@ -108,6 +109,7 @@ const persistentMongoPath = join(process.cwd(), '.local-data', 'mongodb');
     ShopModule,
     ForumModule,
     SocialModule,
+    FooterModule,
   ],
 })
 export class AppModule implements OnApplicationShutdown {

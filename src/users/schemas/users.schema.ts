@@ -144,6 +144,15 @@ export class User {
 
   @Prop({ type: Date })
   lastLoginAt?: Date;
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
+  friends!: Types.ObjectId[];
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
+  followers!: Types.ObjectId[];
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
+  following!: Types.ObjectId[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

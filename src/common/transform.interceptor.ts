@@ -16,13 +16,6 @@ export interface StandardResponse<T> {
   };
 }
 
-/**
- * Wraps every successful response with a consistent envelope so the
- * frontend can rely on `response.data` everywhere.
- *
- * If the controller already returns a payload shaped like
- * `{ data, meta }`, it's passed through untouched.
- */
 @Injectable()
 export class TransformInterceptor<T> implements NestInterceptor<
   T,

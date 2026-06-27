@@ -3,14 +3,6 @@ import { HydratedDocument, Types } from 'mongoose';
 
 export type BookmarkDocument = HydratedDocument<Bookmark>;
 
-/**
- * Bookmark — user-saved lessons for later review ("Bài đã lưu").
- *
- * Different from UserProgress.bookmarked because:
- *   - User can also bookmark Questions / Exercises that aren't part
- *     of a node (eg. from the Exercises list).
- *   - We want a dedicated created_at for sorting in the Saved tab.
- */
 @Schema({ timestamps: true })
 export class Bookmark {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })

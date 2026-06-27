@@ -4,14 +4,6 @@ import { HistoryAction } from '../../common/enums';
 
 export type LearningHistoryDocument = HydratedDocument<LearningHistory>;
 
-/**
- * Append-only activity log per user.
- *
- * Feeds:
- *   - History page (Archives of Mastery / Bookmarked Lore / Tracking)
- *   - Temporal Progression chart
- *   - "Insight: Your solving speed improved..." analytics
- */
 @Schema({ timestamps: { createdAt: true, updatedAt: false } })
 export class LearningHistory {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
@@ -44,7 +36,6 @@ export class LearningHistory {
   @Prop({ type: Number })
   coinsEarned?: number;
 
-  /** Bonus data — eg. solving time, opponent name, error type */
   @Prop({ type: Object, default: {} })
   metadata!: Record<string, unknown>;
 }

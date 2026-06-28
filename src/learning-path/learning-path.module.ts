@@ -13,6 +13,10 @@ import {
   UserProgress,
   UserProgressSchema,
 } from './schemas/user-progress.schema';
+import {
+  LearningHistory,
+  LearningHistorySchema,
+} from '../history/schemas/learning-history.schema';
 
 @Module({
   imports: [
@@ -20,6 +24,7 @@ import {
       { name: Roadmap.name, schema: RoadmapSchema },
       { name: RoadmapNode.name, schema: RoadmapNodeSchema },
       { name: UserProgress.name, schema: UserProgressSchema },
+      { name: LearningHistory.name, schema: LearningHistorySchema },
     ]),
   ],
   controllers: [LearningPathController],

@@ -66,6 +66,25 @@ export type ActivityEntry = {
   metadata: Record<string, unknown>;
 };
 
+export type ErrorItem = {
+  id: string;
+  icon: string;
+  title: string;
+  context: string;
+};
+
+export type AdviceData = {
+  weakness: string;
+  suggestedTitle: string;
+  suggestedNodeId: string | null;
+};
+
+export type TrackingResponse = {
+  totalActive: number;
+  errorChronology: ErrorItem[];
+  advice: AdviceData | null;
+};
+
 type LeanNode = RoadmapNode & { _id: Types.ObjectId };
 
 type PopulatedProgress = Omit<UserProgress, 'nodeId'> & {
@@ -85,14 +104,6 @@ type PopulatedBookmark = Omit<Bookmark, 'nodeId'> & {
 type LeanBattle = Battle & { _id: Types.ObjectId; createdAt?: Date };
 
 type LeanHistory = LearningHistory & { _id: Types.ObjectId; createdAt?: Date };
-import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import {
-  LearningHistory,
-  LearningHistoryDocument,
-} from './schemas/learning-history.schema';
-import { Bookmark, BookmarkDocument } from './schemas/bookmark.schema';
 
 @Injectable()
 export class HistoryService {
@@ -231,6 +242,21 @@ export class HistoryService {
     return { success: true };
   }
 
+  async removeDraft(
+    userId: Types.ObjectId,
+    draftId: string,
+  ): Promise<{ success: boolean }> {
+    if (!Types.ObjectId.isValid(draftId)) {
+      throw new BadRequestException('Invalid draft id');
+    }
+    // "Draft" ở tab Unfinished là một battle chưa kết thúc của user → huỷ nó.
+    await this.battleModel.updateOne(
+      { _id: new Types.ObjectId(draftId), 'players.userId': userId },
+      { status: BattleStatus.CANCELLED },
+    );
+    return { success: true };
+  }
+
   async getActivity(userId: Types.ObjectId): Promise<ActivityEntry[]> {
     const rows = await this.historyModel
       .find({ userId })
@@ -247,6 +273,61 @@ export class HistoryService {
       createdAt: row.createdAt?.toISOString() ?? '',
       metadata: row.metadata ?? {},
     }));
+  }
+
+  async getTracking(userId: Types.ObjectId): Promise<TrackingResponse> {
+    // "Anomalies" = các node đang làm dở mà user gặp lỗi (wrongCount > 0) hoặc bị tạm khoá.
+    const rows = await this.progressModel
+      .find({
+        userId,
+        status: {
+          $in: [NodeStatus.CURRENT, NodeStatus.OPEN, NodeStatus.TEMP_LOCKED],
+        },
+      })
+      .sort({ wrongCount: -1, lastAttemptAt: -1, updatedAt: -1 })
+      .limit(50)
+      .populate('nodeId')
+      .lean<PopulatedProgress[]>();
+
+    const anomalies = rows.filter(
+      (row) =>
+        (row.wrongCount ?? 0) > 0 || row.status === NodeStatus.TEMP_LOCKED,
+    );
+
+    const errorChronology: ErrorItem[] = anomalies.map((row) => {
+      const node = row.nodeId;
+      const wrong = row.wrongCount ?? 0;
+      const context =
+        row.status === NodeStatus.TEMP_LOCKED
+          ? 'Temporarily locked after too many wrong submissions'
+          : (node?.description?.slice(0, 80) ??
+            node?.tags?.[0] ??
+            `${wrong} wrong attempt${wrong === 1 ? '' : 's'}`);
+      return {
+        id: String(row._id),
+        icon: row.status === NodeStatus.TEMP_LOCKED ? 'lock' : 'bug_report',
+        title: node?.title ?? 'Untitled Quest',
+        context,
+      };
+    });
+
+    const worst = anomalies[0];
+    const advice: AdviceData | null = worst
+      ? {
+          weakness:
+            worst.nodeId?.tags?.[0] ??
+            worst.nodeId?.title ??
+            'Repeated mistakes on an active quest',
+          suggestedTitle: worst.nodeId?.title ?? 'Review your current quest',
+          suggestedNodeId: worst.nodeId?._id ? String(worst.nodeId._id) : null,
+        }
+      : null;
+
+    return {
+      totalActive: errorChronology.length,
+      errorChronology,
+      advice,
+    };
   }
 
   private nodeIcon(type?: NodeType): string {
@@ -301,96 +382,5 @@ export class HistoryService {
     if (days < 7) return `${days}d ago`;
     const weeks = Math.floor(days / 7);
     return `${weeks}w ago`;
-    private readonly learningHistoryModel: Model<LearningHistoryDocument>,
-    @InjectModel(Bookmark.name)
-    private readonly bookmarkModel: Model<BookmarkDocument>,
-  ) {}
-
-  async getMyLearningHistory(
-    userId: string,
-    action?: string,
-  ): Promise<LearningHistory[]> {
-    const filter: Record<string, any> = { userId: new Types.ObjectId(userId) };
-
-    if (action) {
-      filter.action = action;
-    }
-
-    return this.learningHistoryModel
-      .find(filter)
-      .sort({ createdAt: -1 })
-      .exec();
-  }
-
-  async getMyAnalytics(userId: string): Promise<Record<string, unknown>> {
-    const records = await this.learningHistoryModel
-      .find({ userId: new Types.ObjectId(userId) })
-      .exec();
-
-    let totalXp = 0;
-    let totalCoins = 0;
-
-    records.forEach((rec) => {
-      if (rec.xpEarned) totalXp += rec.xpEarned;
-      if (rec.coinsEarned) totalCoins += rec.coinsEarned;
-    });
-
-    return {
-      totalActivities: records.length,
-      totalXpEarned: totalXp,
-      totalCoinsEarned: totalCoins,
-    };
-  }
-
-  async getMyBookmarks(userId: string): Promise<Bookmark[]> {
-    return this.bookmarkModel
-      .find({ userId: new Types.ObjectId(userId) })
-      .sort({ createdAt: -1 })
-      .exec();
-  }
-
-  async toggleBookmark(
-    userId: string,
-    payload: {
-      nodeId?: string;
-      questionId?: string;
-      exerciseId?: string;
-      note?: string;
-      tags?: string[];
-    },
-  ): Promise<Record<string, unknown>> {
-    const filter: Record<string, any> = { userId: new Types.ObjectId(userId) };
-
-    if (payload.nodeId) filter.nodeId = new Types.ObjectId(payload.nodeId);
-    if (payload.questionId)
-      filter.questionId = new Types.ObjectId(payload.questionId);
-    if (payload.exerciseId)
-      filter.exerciseId = new Types.ObjectId(payload.exerciseId);
-
-    const existing = await this.bookmarkModel.findOne(filter).exec();
-
-    if (existing) {
-      await this.bookmarkModel.deleteOne({ _id: existing._id }).exec();
-      return { bookmarked: false, message: 'Đã bỏ lưu mục này thành công.' };
-    }
-
-    const newBookmark = new this.bookmarkModel({
-      userId: new Types.ObjectId(userId),
-      nodeId: payload.nodeId ? new Types.ObjectId(payload.nodeId) : undefined,
-      questionId: payload.questionId
-        ? new Types.ObjectId(payload.questionId)
-        : undefined,
-      exerciseId: payload.exerciseId
-        ? new Types.ObjectId(payload.exerciseId)
-        : undefined,
-      note: payload.note,
-      tags: payload.tags || [],
-    });
-
-    await newBookmark.save();
-    return {
-      bookmarked: true,
-      message: 'Đã lưu mục này thành công vào Tab đánh dấu!',
-    };
   }
 }

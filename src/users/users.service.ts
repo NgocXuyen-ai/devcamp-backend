@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from './schemas/users.schema';
@@ -30,8 +34,25 @@ export class UsersService {
   async findAll(): Promise<User[]> {
     return this.userModel.find().exec();
   }
+
   async findOneByEmail(email: string): Promise<UserDocument | null> {
-    // password has `select: false` in the schema — must opt in for login check
     return this.userModel.findOne({ email }).select('+password').exec();
+  }
+
+  async getProfile(jwtUser: Record<string, unknown>): Promise<User> {
+    const userId = (jwtUser['userId'] ||
+      jwtUser['_id'] ||
+      jwtUser['id']) as string;
+
+    const user = await this.userModel
+      .findById(userId)
+      .select('-password')
+      .exec();
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
   }
 }

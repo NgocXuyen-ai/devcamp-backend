@@ -5,10 +5,12 @@ import { Model, Types } from 'mongoose';
 import { Roadmap } from './schemas/roadmap.schema';
 import { RoadmapNode } from './schemas/roadmap-node.schema';
 import { UserProgress } from './schemas/user-progress.schema';
+import { LearningHistory } from '../history/schemas/learning-history.schema';
 
 import { CreateLearningPathDto } from './dto/create-learning-path.dto';
 import { CreateNodeDto } from './dto/create-node.dto';
 import { UpdateProgressDto } from './dto/update-progress.dto';
+import { HistoryAction, NodeStatus } from '../common/enums';
 
 @Injectable()
 export class LearningPathService {
@@ -21,6 +23,9 @@ export class LearningPathService {
 
     @InjectModel(UserProgress.name)
     private readonly progressModel: Model<UserProgress>,
+
+    @InjectModel(LearningHistory.name)
+    private readonly historyModel: Model<LearningHistory>,
   ) {}
 
   // =========================
@@ -96,8 +101,10 @@ export class LearningPathService {
     dto: UpdateProgressDto,
   ) {
     const node = await this.getNodeById(nodeId);
+    const now = new Date();
+    const isCompleted = dto.status === NodeStatus.COMPLETED;
 
-    return this.progressModel.findOneAndUpdate(
+    const progress = await this.progressModel.findOneAndUpdate(
       {
         userId,
         nodeId: new Types.ObjectId(nodeId),
@@ -109,9 +116,30 @@ export class LearningPathService {
 
         status: dto.status,
         score: dto.quizScore ?? 0,
+        lastAttemptAt: now,
+        // Chỉ stamp completedAt khi thực sự hoàn thành để tab Finished hiển thị đúng ngày.
+        ...(isCompleted ? { completedAt: now } : {}),
+        $inc: { submitCount: 1 },
       },
       { new: true, upsert: true },
     );
+
+    // Ghi vào LearningHistory để feed tab Activity (best-effort, không chặn progress).
+    try {
+      await this.historyModel.create({
+        userId,
+        action: isCompleted
+          ? HistoryAction.LESSON_COMPLETED
+          : HistoryAction.SUBMISSION_MADE,
+        nodeId: new Types.ObjectId(nodeId),
+        score: dto.quizScore ?? 0,
+        metadata: { title: node.title, status: dto.status },
+      });
+    } catch {
+      // Activity feed là phụ — lỗi ghi history không được làm hỏng việc lưu progress.
+    }
+
+    return progress;
   }
 
   async getMyProgress(userId: Types.ObjectId, roadmapId: string) {

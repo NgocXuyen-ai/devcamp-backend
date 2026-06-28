@@ -1,142 +1,224 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { FriendRequest, FriendRequestDocument } from './schemas/friend-request.schema';
-import { DirectMessage, DirectMessageDocument } from './schemas/direct-message.schema';
 import { User, UserDocument } from '../users/schemas/users.schema';
+import {
+  FriendRequest,
+  FriendRequestDocument,
+} from './schemas/friend-request.schema';
+import {
+  DirectMessage,
+  DirectMessageDocument,
+} from './schemas/direct-message.schema';
+
+const USER_FIELDS =
+  'username avatarUrl email role fieldFocus selfAssessedLevel gamification createdAt';
 
 @Injectable()
 export class SocialService {
   constructor(
-    @InjectModel(FriendRequest.name) private friendRequestModel: Model<FriendRequestDocument>,
-    @InjectModel(DirectMessage.name) private directMessageModel: Model<DirectMessageDocument>,
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
+    @InjectModel(FriendRequest.name)
+    private readonly friendRequestModel: Model<FriendRequestDocument>,
+    @InjectModel(DirectMessage.name)
+    private readonly dmModel: Model<DirectMessageDocument>,
   ) {}
 
-  async sendFriendRequest(requesterId: string, recipientId: string) {
-    if (requesterId === recipientId) {
-      throw new BadRequestException("Cannot send friend request to yourself");
+  private toObjectId(id: string, label = 'User'): Types.ObjectId {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new NotFoundException(`${label} not found`);
     }
-
-    const existingRequest = await this.friendRequestModel.findOne({
-      requesterId,
-      recipientId,
-    });
-
-    if (existingRequest) {
-      throw new BadRequestException("Friend request already sent");
-    }
-
-    // Check reverse request
-    const reverseRequest = await this.friendRequestModel.findOne({
-      requesterId: recipientId,
-      recipientId: requesterId,
-    });
-
-    if (reverseRequest) {
-      if (reverseRequest.status === 'pending') {
-        return this.acceptFriendRequest(recipientId, requesterId);
-      }
-    }
-
-    const request = new this.friendRequestModel({ requesterId, recipientId, status: 'pending' });
-    return request.save();
+    return new Types.ObjectId(id);
   }
 
-  async getFriendRequests(userId: string) {
-    return this.friendRequestModel.find({ recipientId: userId, status: 'pending' }).populate('requesterId', 'username avatarUrl');
+  async getProfile(userId: string) {
+    const user = await this.userModel
+      .findById(this.toObjectId(userId))
+      .select(USER_FIELDS)
+      .populate({ path: 'friends', select: USER_FIELDS })
+      .populate({ path: 'followers', select: USER_FIELDS })
+      .populate({ path: 'following', select: USER_FIELDS })
+      .lean();
+    if (!user) throw new NotFoundException('User not found');
+    return user;
   }
 
-  async acceptFriendRequest(requesterId: string, recipientId: string) {
-    const request = await this.friendRequestModel.findOne({ requesterId, recipientId, status: 'pending' });
-    if (!request) {
-      throw new NotFoundException("Friend request not found");
+  async sendFriendRequest(currentUserId: Types.ObjectId, recipientId: string) {
+    const recipient = this.toObjectId(recipientId);
+    if (String(recipient) === String(currentUserId)) {
+      throw new BadRequestException('Cannot send a friend request to yourself');
     }
+    const recipientUser = await this.userModel.exists({ _id: recipient });
+    if (!recipientUser) throw new NotFoundException('User not found');
+
+    const alreadyFriends = await this.userModel.exists({
+      _id: currentUserId,
+      friends: recipient,
+    });
+    if (alreadyFriends) {
+      throw new BadRequestException('You are already friends');
+    }
+
+    // Idempotent: reuse an existing request, resetting a rejected one to pending.
+    const request = await this.friendRequestModel.findOneAndUpdate(
+      { requesterId: currentUserId, recipientId: recipient },
+      { $set: { status: 'pending' } },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
+    return request;
+  }
+
+  async getFriendRequests(currentUserId: Types.ObjectId) {
+    return this.friendRequestModel
+      .find({ recipientId: currentUserId, status: 'pending' })
+      .sort({ createdAt: -1 })
+      .populate({ path: 'requesterId', select: USER_FIELDS })
+      .lean();
+  }
+
+  async acceptFriendRequest(
+    currentUserId: Types.ObjectId,
+    requesterId: string,
+  ) {
+    const requester = this.toObjectId(requesterId);
+    const request = await this.friendRequestModel.findOne({
+      requesterId: requester,
+      recipientId: currentUserId,
+      status: 'pending',
+    });
+    if (!request) throw new NotFoundException('Friend request not found');
 
     request.status = 'accepted';
     await request.save();
 
-    await this.userModel.findByIdAndUpdate(requesterId, { $addToSet: { friends: recipientId } });
-    await this.userModel.findByIdAndUpdate(recipientId, { $addToSet: { friends: requesterId } });
-
-    return { message: "Friend request accepted" };
+    await this.userModel.updateOne(
+      { _id: currentUserId },
+      { $addToSet: { friends: requester } },
+    );
+    await this.userModel.updateOne(
+      { _id: requester },
+      { $addToSet: { friends: currentUserId } },
+    );
+    return { success: true };
   }
 
-  async rejectFriendRequest(requesterId: string, recipientId: string) {
-    const request = await this.friendRequestModel.findOne({ requesterId, recipientId, status: 'pending' });
-    if (!request) {
-      throw new NotFoundException("Friend request not found");
+  async rejectFriendRequest(
+    currentUserId: Types.ObjectId,
+    requesterId: string,
+  ) {
+    const requester = this.toObjectId(requesterId);
+    const request = await this.friendRequestModel.findOneAndUpdate(
+      {
+        requesterId: requester,
+        recipientId: currentUserId,
+        status: 'pending',
+      },
+      { $set: { status: 'rejected' } },
+      { new: true },
+    );
+    if (!request) throw new NotFoundException('Friend request not found');
+    return { success: true };
+  }
+
+  async getFriends(currentUserId: Types.ObjectId) {
+    const user = await this.userModel
+      .findById(currentUserId)
+      .select('friends')
+      .populate({ path: 'friends', select: USER_FIELDS })
+      .lean();
+    return user?.friends ?? [];
+  }
+
+  async follow(currentUserId: Types.ObjectId, followingId: string) {
+    const target = this.toObjectId(followingId);
+    if (String(target) === String(currentUserId)) {
+      throw new BadRequestException('Cannot follow yourself');
     }
+    const exists = await this.userModel.exists({ _id: target });
+    if (!exists) throw new NotFoundException('User not found');
 
-    request.status = 'rejected';
-    await request.save();
-
-    return { message: "Friend request rejected" };
+    await this.userModel.updateOne(
+      { _id: currentUserId },
+      { $addToSet: { following: target } },
+    );
+    await this.userModel.updateOne(
+      { _id: target },
+      { $addToSet: { followers: currentUserId } },
+    );
+    return { success: true };
   }
 
-  async getFriends(userId: string) {
-    const user = await this.userModel.findById(userId).populate('friends', 'username avatarUrl fieldFocus role gamification');
-    if (!user) {
-      throw new NotFoundException("User not found");
-    }
-    return user.friends;
+  async unfollow(currentUserId: Types.ObjectId, followingId: string) {
+    const target = this.toObjectId(followingId);
+    await this.userModel.updateOne(
+      { _id: currentUserId },
+      { $pull: { following: target } },
+    );
+    await this.userModel.updateOne(
+      { _id: target },
+      { $pull: { followers: currentUserId } },
+    );
+    return { success: true };
   }
 
-  async followUser(followerId: string, followingId: string) {
-    if (followerId === followingId) throw new BadRequestException("Cannot follow yourself");
-
-    await this.userModel.findByIdAndUpdate(followerId, { $addToSet: { following: followingId } });
-    await this.userModel.findByIdAndUpdate(followingId, { $addToSet: { followers: followerId } });
-
-    return { message: "Successfully followed user" };
+  async search(query: string, currentUserId: Types.ObjectId) {
+    const q = (query ?? '').trim();
+    if (!q) return [];
+    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return this.userModel
+      .find({
+        _id: { $ne: currentUserId },
+        username: { $regex: escaped, $options: 'i' },
+      })
+      .select(USER_FIELDS)
+      .limit(20)
+      .lean();
   }
 
-  async unfollowUser(followerId: string, followingId: string) {
-    await this.userModel.findByIdAndUpdate(followerId, { $pull: { following: followingId } });
-    await this.userModel.findByIdAndUpdate(followingId, { $pull: { followers: followerId } });
+  async sendDirectMessage(
+    senderId: Types.ObjectId,
+    receiverId: string,
+    body: string,
+  ) {
+    const receiver = this.toObjectId(receiverId);
+    const exists = await this.userModel.exists({ _id: receiver });
+    if (!exists) throw new NotFoundException('User not found');
 
-    return { message: "Successfully unfollowed user" };
+    const created = await this.dmModel.create({
+      senderId,
+      receiverId: receiver,
+      body,
+    });
+    const populated = await created.populate({
+      path: 'senderId',
+      select: USER_FIELDS,
+    });
+    return populated.toObject();
   }
 
-  async getUserProfile(userId: string) {
-    const user = await this.userModel.findById(userId)
-      .select('username email avatarUrl role fieldFocus selfAssessedLevel gamification createdAt friends followers following')
-      .populate('friends', 'username avatarUrl')
-      .populate('followers', 'username avatarUrl')
-      .populate('following', 'username avatarUrl');
-    
-    
-    if (!user) throw new NotFoundException("User not found");
-    return user;
-  }
+  async getConversation(currentUserId: Types.ObjectId, otherUserId: string) {
+    const other = this.toObjectId(otherUserId);
+    const messages = await this.dmModel
+      .find({
+        $or: [
+          { senderId: currentUserId, receiverId: other },
+          { senderId: other, receiverId: currentUserId },
+        ],
+      })
+      .sort({ createdAt: 1 })
+      .populate({ path: 'senderId', select: USER_FIELDS })
+      .lean();
 
-  async sendDirectMessage(senderId: string, receiverId: string, body: string) {
-    const message = new this.directMessageModel({ senderId, receiverId, body });
-    await message.save();
-    return this.directMessageModel.findById(message._id).populate('senderId', 'username avatarUrl role fieldFocus');
-  }
-
-  async getDirectMessages(userId1: string, userId2: string) {
-    return this.directMessageModel.find({
-      $or: [
-        { senderId: userId1, receiverId: userId2 },
-        { senderId: userId2, receiverId: userId1 }
-      ]
-    })
-    .sort({ createdAt: 1 })
-    .populate('senderId', 'username avatarUrl role fieldFocus');
-  }
-
-  async searchUsers(query: string) {
-    if (!query || query.trim().length === 0) return [];
-    
-    let queryFilter: any = { username: new RegExp(query, 'i') };
-    if (Types.ObjectId.isValid(query)) {
-      queryFilter = { $or: [{ _id: query }, { username: new RegExp(query, 'i') }] };
-    }
-    
-    return this.userModel.find(queryFilter)
-      .select('username avatarUrl role fieldFocus followers friends')
-      .limit(10);
+    // Mark messages addressed to the current user as read.
+    await this.dmModel.updateMany(
+      { senderId: other, receiverId: currentUserId, read: false },
+      { $set: { read: true } },
+    );
+    return messages;
   }
 }

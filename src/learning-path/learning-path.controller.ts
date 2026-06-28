@@ -22,7 +22,8 @@ function getUserIdFromReq(req: Request): Types.ObjectId {
   const jwtUser = (req as unknown as { user?: JwtUser }).user;
   const raw = jwtUser?.userId;
   if (raw && Types.ObjectId.isValid(raw)) return new Types.ObjectId(raw);
-  return new Types.ObjectId('507f1f77bcf86cd799439011');
+  // Demo user dùng chung với history/exercises/forum/... để dữ liệu khớp khi chạy local chưa đăng nhập.
+  return new Types.ObjectId('64b000000000000000000001');
 }
 
 @Controller('learning-paths')

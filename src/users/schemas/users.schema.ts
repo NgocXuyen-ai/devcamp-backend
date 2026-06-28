@@ -121,15 +121,21 @@ export class User {
   @Prop({ type: [String], default: [] })
   strengths!: string[];
 
-  // === Preferences (penalty config, study schedule) ===
   @Prop({ type: UserPreferences, default: () => ({}) })
   preferences!: UserPreferences;
 
-  // === Gamification state ===
   @Prop({ type: UserGamification, default: () => ({}) })
   gamification!: UserGamification;
 
-  // === Current roadmap reference ===
+  @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
+  friends!: Types.ObjectId[];
+
+  @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
+  following!: Types.ObjectId[];
+
+  @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
+  followers!: Types.ObjectId[];
+
   @Prop({ type: Types.ObjectId, ref: 'Roadmap' })
   currentRoadmapId?: Types.ObjectId;
 

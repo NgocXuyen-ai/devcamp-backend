@@ -90,6 +90,7 @@ export class MatchmakingService {
           status: BattleStatus.IN_PROGRESS,
           startTime: now,
           endTime: new Date(now.getTime() + timeLimitSeconds * 1000),
+          timeLimitSeconds,
           questionIds,
         },
       },
@@ -104,12 +105,15 @@ export class MatchmakingService {
     input: MatchInput,
     newPlayer: BattlePlayer,
   ): Promise<BattleDocument> {
+    const timeLimitSeconds = input.mode === BattleMode.SPEED ? 600 : 1800;
+
     const created = await this.battleModel.create({
       mode: input.mode,
       field: input.field,
       status: BattleStatus.WAITING,
       players: [newPlayer],
       questionIds: [],
+      timeLimitSeconds,
     });
 
     if (!created) {

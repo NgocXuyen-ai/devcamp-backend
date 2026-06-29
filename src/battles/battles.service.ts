@@ -91,7 +91,23 @@ export class BattlesService {
     if (!isPlayer) {
       throw new ForbiddenException('You are not player of this battle');
     }
-    return battle;
+    const questions = await Promise.all(
+      battle.questionIds.map(async (qId) => {
+        const q = await this.questionsService.findById(qId.toString());
+        if (!q) return null;
+        return {
+          questionId: q._id.toString(),
+          title: q.title,
+          content: q.content,
+          difficulty: q.difficulty,
+        };
+      }),
+    );
+
+    return {
+      ...battle,
+      questions: questions.filter((q) => q !== null),
+    };
   }
   async getUserHistory(userId: string, dto: GetHistoryDto) {
     const page = dto.page ?? 1;

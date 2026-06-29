@@ -1,7 +1,19 @@
-import { Controller, Delete, Get, Param, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { Types } from 'mongoose';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
+import { JwtAuthGuard } from '../common/guard/jwt-auth.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { HistoryService } from './history.service';
 
 type JwtUser = { userId?: string | Types.ObjectId } | null;
@@ -41,6 +53,30 @@ export class HistoryController {
   @Get('activity')
   activity(@Req() req: Request) {
     return this.historyService.getActivity(getUserIdFromReq(req));
+  }
+}
+
+@Controller('me')
+@UseGuards(JwtAuthGuard)
+export class MeHistoryController {
+  constructor(private readonly historyService: HistoryService) {}
+
+  @Get('histories')
+  async getMyLearningHistory(
+    @CurrentUser() user: { userId: string },
+    @Query('action') action?: string,
+  ) {
+    const data = await this.historyService.getMyLearningHistory(
+      user.userId,
+      action,
+    );
+    return { success: true, data };
+  }
+
+  @Get('histories/analytics')
+  async getMyAnalytics(@CurrentUser() user: { userId: string }) {
+    const data = await this.historyService.getMyAnalytics(user.userId);
+    return { success: true, data };
   }
 
   @Get('tracking')

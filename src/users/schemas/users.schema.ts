@@ -10,10 +10,6 @@ import {
 
 export type UserDocument = HydratedDocument<User>;
 
-/**
- * Personalization config derived from the onboarding survey.
- * Captured from "Phân đoạn 3: Discipline & Penalty Setup".
- */
 @Schema({ _id: false })
 export class UserPreferences {
   @Prop({ type: Number, default: 2 })
@@ -54,6 +50,9 @@ export class UserGamification {
 
   @Prop({ type: Date })
   lastActiveDate?: Date;
+
+  @Prop({ type: Date })
+  lastDailyClaimAt?: Date;
 
   @Prop({ type: [String], default: [] })
   badges!: string[]; // ['founders_mantle', 'first_blood', ...]
@@ -122,15 +121,21 @@ export class User {
   @Prop({ type: [String], default: [] })
   strengths!: string[];
 
-  // === Preferences (penalty config, study schedule) ===
   @Prop({ type: UserPreferences, default: () => ({}) })
   preferences!: UserPreferences;
 
-  // === Gamification state ===
   @Prop({ type: UserGamification, default: () => ({}) })
   gamification!: UserGamification;
 
-  // === Current roadmap reference ===
+  @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
+  friends!: Types.ObjectId[];
+
+  @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
+  following!: Types.ObjectId[];
+
+  @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
+  followers!: Types.ObjectId[];
+
   @Prop({ type: Types.ObjectId, ref: 'Roadmap' })
   currentRoadmapId?: Types.ObjectId;
 
@@ -143,6 +148,4 @@ export class User {
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
-// Compound indexes for common queries
-// (email & username already have unique indexes from their @Prop definitions)
 UserSchema.index({ provider: 1, providerId: 1 });

@@ -4,15 +4,6 @@ import { AIMessageRole } from '../../common/enums';
 
 export type AiChatMessageDocument = HydratedDocument<AiChatMessage>;
 
-/**
- * AIChatMessage — matches the schema diagram on page 46:
- *   id, sessionId, role, content, tokenUsed, createdAt.
- *
- * Stored separately from session so we can:
- *   - paginate long conversations
- *   - allow per-message thumbs up/down feedback
- *   - link a hint back to the exact submission that triggered it
- */
 @Schema({ timestamps: { createdAt: true, updatedAt: false } })
 export class AiChatMessage {
   @Prop({ type: Types.ObjectId, ref: 'AiChatSession', required: true })

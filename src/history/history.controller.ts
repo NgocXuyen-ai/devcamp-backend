@@ -1,7 +1,19 @@
-import { Controller, Delete, Get, Param, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { Types } from 'mongoose';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
+import { JwtAuthGuard } from '../common/guard/jwt-auth.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { HistoryService } from './history.service';
 
 type JwtUser = { userId?: string | Types.ObjectId } | null;
@@ -41,14 +53,12 @@ export class HistoryController {
   @Get('activity')
   activity(@Req() req: Request) {
     return this.historyService.getActivity(getUserIdFromReq(req));
-import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
-import { HistoryService } from './history.service';
-import { JwtAuthGuard } from '../common/guard/jwt-auth.guard';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
+  }
+}
 
 @Controller('me')
 @UseGuards(JwtAuthGuard)
-export class HistoryController {
+export class MeHistoryController {
   constructor(private readonly historyService: HistoryService) {}
 
   @Get('histories')

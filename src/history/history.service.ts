@@ -85,14 +85,6 @@ type PopulatedBookmark = Omit<Bookmark, 'nodeId'> & {
 type LeanBattle = Battle & { _id: Types.ObjectId; createdAt?: Date };
 
 type LeanHistory = LearningHistory & { _id: Types.ObjectId; createdAt?: Date };
-import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import {
-  LearningHistory,
-  LearningHistoryDocument,
-} from './schemas/learning-history.schema';
-import { Bookmark, BookmarkDocument } from './schemas/bookmark.schema';
 
 @Injectable()
 export class HistoryService {
@@ -301,10 +293,7 @@ export class HistoryService {
     if (days < 7) return `${days}d ago`;
     const weeks = Math.floor(days / 7);
     return `${weeks}w ago`;
-    private readonly learningHistoryModel: Model<LearningHistoryDocument>,
-    @InjectModel(Bookmark.name)
-    private readonly bookmarkModel: Model<BookmarkDocument>,
-  ) {}
+  }
 
   async getMyLearningHistory(
     userId: string,
@@ -316,14 +305,11 @@ export class HistoryService {
       filter.action = action;
     }
 
-    return this.learningHistoryModel
-      .find(filter)
-      .sort({ createdAt: -1 })
-      .exec();
+    return this.historyModel.find(filter).sort({ createdAt: -1 }).exec();
   }
 
   async getMyAnalytics(userId: string): Promise<Record<string, unknown>> {
-    const records = await this.learningHistoryModel
+    const records = await this.historyModel
       .find({ userId: new Types.ObjectId(userId) })
       .exec();
 

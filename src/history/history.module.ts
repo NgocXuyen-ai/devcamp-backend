@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
-import { HistoryController } from './history.controller';
+import { HistoryController, MeHistoryController } from './history.controller';
 import { HistoryService } from './history.service';
 
 import {
@@ -19,14 +19,6 @@ import {
 } from '../learning-path/schemas/roadmap-node.schema';
 import { Battle, BattleSchema } from '../battles/schemas/battle.schema';
 
-import { HistoryController } from './history.controller';
-import { HistoryService } from './history.service';
-import {
-  LearningHistory,
-  LearningHistorySchema,
-} from './schemas/learning-history.schema';
-import { Bookmark, BookmarkSchema } from './schemas/bookmark.schema';
-
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -37,7 +29,7 @@ import { Bookmark, BookmarkSchema } from './schemas/bookmark.schema';
       { name: Battle.name, schema: BattleSchema },
     ]),
   ],
-  controllers: [HistoryController],
+  controllers: [HistoryController, MeHistoryController],
   providers: [HistoryService],
   exports: [HistoryService],
 })

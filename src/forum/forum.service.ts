@@ -45,7 +45,7 @@ export class ForumService {
     return reactions.map((r) => ({
       emoji: r.emoji,
       count: r.users?.length ?? 0,
-      users: (r.users ?? []).map((u) => String(u)),
+      users: (r.users ?? []).map((u: unknown) => String(u)),
     }));
   }
 
@@ -170,7 +170,9 @@ export class ForumService {
       reaction = { emoji, users: [] };
       reactions.push(reaction);
     }
-    const idx = reaction.users.findIndex((u) => String(u) === String(userId));
+    const idx = reaction.users.findIndex(
+      (u: unknown) => String(u) === String(userId),
+    );
     if (idx >= 0) {
       reaction.users.splice(idx, 1);
       if (reaction.users.length === 0) {

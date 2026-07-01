@@ -6,13 +6,13 @@ export type ForumPostDocument = HydratedDocument<ForumPost>;
 
 @Schema({ timestamps: true })
 export class ForumPost {
-  @Prop({ type: String, required: true, index: true })
+  @Prop({ required: true })
   channelId!: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   authorId!: Types.ObjectId;
 
-  @Prop({ type: String, required: true, trim: true })
+  @Prop({ required: true })
   body!: string;
 
   @Prop({ type: [ReactionSchema], default: [] })

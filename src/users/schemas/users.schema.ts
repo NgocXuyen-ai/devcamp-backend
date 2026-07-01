@@ -13,21 +13,21 @@ export type UserDocument = HydratedDocument<User>;
 @Schema({ _id: false })
 export class UserPreferences {
   @Prop({ type: Number, default: 2 })
-  dailyStudyHours!: number; // số giờ học/ngày
+  dailyStudyHours!: number;
 
   @Prop({ type: String, default: '20:00-22:00' })
-  focusTimeWindow!: string; // khung giờ tập trung
+  focusTimeWindow!: string;
 
   @Prop({ type: String, enum: DisciplineLevel, default: DisciplineLevel.LIGHT })
   disciplineLevel!: DisciplineLevel;
 
   @Prop({ type: Number, default: 5 })
-  maxSubmitAttempts!: number; // 10 (Light) hay 5 (Strict)
+  maxSubmitAttempts!: number;
 
   @Prop({ type: Number, default: 30 })
-  lockTimeMinutes!: number; // 15 hay 30 phút
+  lockTimeMinutes!: number;
 
-  @Prop({ type: String, default: 'project' }) // 'battle' | 'project'
+  @Prop({ type: String, default: 'project' })
   milestoneTestPreference!: string;
 }
 
@@ -43,7 +43,7 @@ export class UserGamification {
   coins!: number;
 
   @Prop({ type: Number, default: 0 })
-  currentStreak!: number; // chuỗi ngày học liên tiếp
+  currentStreak!: number;
 
   @Prop({ type: Number, default: 0 })
   longestStreak!: number;
@@ -55,7 +55,7 @@ export class UserGamification {
   lastDailyClaimAt?: Date;
 
   @Prop({ type: [String], default: [] })
-  badges!: string[]; // ['founders_mantle', 'first_blood', ...]
+  badges!: string[];
 }
 
 @Schema({ timestamps: true })
@@ -73,13 +73,13 @@ export class User {
   email!: string;
 
   @Prop({ type: String, required: false, select: false })
-  password?: string; // optional — social login users may not have one
+  password?: string;
 
   @Prop({ type: String, enum: LoginProvider, default: LoginProvider.EMAIL })
   provider!: LoginProvider;
 
   @Prop({ type: String })
-  providerId?: string; // Google/GitHub sub id
+  providerId?: string;
 
   @Prop({ type: String, enum: UserRole, default: UserRole.USER })
   role!: UserRole;
@@ -88,13 +88,13 @@ export class User {
   avatarUrl?: string;
 
   @Prop({ type: Boolean, default: true })
-  isFirstLogin!: boolean; // true → bật onboarding survey
+  isFirstLogin!: boolean;
 
   @Prop({ type: Boolean, default: false })
   emailVerified!: boolean;
 
   @Prop({ type: Boolean, default: false })
-  isLocked!: boolean; // tài khoản bị khoá tạm (sai password >5)
+  isLocked!: boolean;
 
   @Prop({ type: Date })
   lockedUntil?: Date;
@@ -104,19 +104,19 @@ export class User {
 
   // === Survey results ===
   @Prop({ type: String, enum: CareerField })
-  fieldFocus?: CareerField; // FE/BE/Fullstack
+  fieldFocus?: CareerField;
 
   @Prop({ type: String, enum: SkillLevel })
   selfAssessedLevel?: SkillLevel;
 
   @Prop({ type: String })
-  learningGoal?: string; // "get a job" / "build projects" / ...
+  learningGoal?: string;
 
   @Prop({ type: [String], default: [] })
-  knownLanguages!: string[]; // Python, JavaScript, Java...
+  knownLanguages!: string[];
 
   @Prop({ type: [String], default: [] })
-  weaknesses!: string[]; // các chủ đề yếu rút ra từ test
+  weaknesses!: string[];
 
   @Prop({ type: [String], default: [] })
   strengths!: string[];
@@ -131,16 +131,16 @@ export class User {
   friends!: Types.ObjectId[];
 
   @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
-  following!: Types.ObjectId[];
+  followers!: Types.ObjectId[];
 
   @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
-  followers!: Types.ObjectId[];
+  following!: Types.ObjectId[];
 
   @Prop({ type: Types.ObjectId, ref: 'Roadmap' })
   currentRoadmapId?: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'RoadmapNode' })
-  currentNodeId?: Types.ObjectId; // node đang học dở
+  currentNodeId?: Types.ObjectId;
 
   @Prop({ type: Date })
   lastLoginAt?: Date;

@@ -61,6 +61,20 @@ export class SkillTestStartDto {
   questionCount?: number;
 }
 
+export class SkillTestRunDto {
+  @ApiProperty()
+  @IsMongoId()
+  questionId!: string;
+
+  @ApiProperty({
+    description: 'JavaScript code — phải định nghĩa function solve()',
+    example: 'function solve(input) {\n  return input;\n}',
+  })
+  @IsString()
+  @MaxLength(20000)
+  code!: string;
+}
+
 export class CodeSolutionItemDto {
   @ApiProperty()
   @IsMongoId()

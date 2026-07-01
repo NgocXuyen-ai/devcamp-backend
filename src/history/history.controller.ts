@@ -79,28 +79,13 @@ export class MeHistoryController {
     return { success: true, data };
   }
 
-  @Get('bookmarks')
-  async getMyBookmarks(@CurrentUser() user: { userId: string }) {
-    const data = await this.historyService.getMyBookmarks(user.userId);
-    return { success: true, data };
+  @Get('tracking')
+  tracking(@Req() req: Request) {
+    return this.historyService.getTracking(getUserIdFromReq(req));
   }
 
-  @Post('bookmarks')
-  async toggleBookmark(
-    @CurrentUser() user: { userId: string },
-    @Body()
-    payload: {
-      nodeId?: string;
-      questionId?: string;
-      exerciseId?: string;
-      note?: string;
-      tags?: string[];
-    },
-  ) {
-    const result = await this.historyService.toggleBookmark(
-      user.userId,
-      payload,
-    );
-    return { success: true, ...result };
+  @Delete('drafts/:id')
+  removeDraft(@Req() req: Request, @Param('id') id: string) {
+    return this.historyService.removeDraft(getUserIdFromReq(req), id);
   }
 }

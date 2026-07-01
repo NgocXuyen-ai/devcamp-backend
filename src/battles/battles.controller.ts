@@ -40,7 +40,8 @@ function getUserFromReq(req: Request): {
       avatar: jwtUser?.avatar,
     };
   }
-  return { userId: '507f1f77bcf86cd799439011', username: 'demo-user' };
+  // Demo user dùng chung với history/exercises/learning-path để draft battle hiện đúng ở tab Unfinished.
+  return { userId: '64b000000000000000000001', username: 'demo-user' };
 }
 
 @Controller('battles')

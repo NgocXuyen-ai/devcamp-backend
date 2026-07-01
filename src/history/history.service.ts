@@ -66,6 +66,25 @@ export type ActivityEntry = {
   metadata: Record<string, unknown>;
 };
 
+export type ErrorItem = {
+  id: string;
+  icon: string;
+  title: string;
+  context: string;
+};
+
+export type AdviceData = {
+  weakness: string;
+  suggestedTitle: string;
+  suggestedNodeId: string | null;
+};
+
+export type TrackingResponse = {
+  totalActive: number;
+  errorChronology: ErrorItem[];
+  advice: AdviceData | null;
+};
+
 type LeanNode = RoadmapNode & { _id: Types.ObjectId };
 
 type PopulatedProgress = Omit<UserProgress, 'nodeId'> & {
@@ -223,6 +242,21 @@ export class HistoryService {
     return { success: true };
   }
 
+  async removeDraft(
+    userId: Types.ObjectId,
+    draftId: string,
+  ): Promise<{ success: boolean }> {
+    if (!Types.ObjectId.isValid(draftId)) {
+      throw new BadRequestException('Invalid draft id');
+    }
+    // "Draft" ở tab Unfinished là một battle chưa kết thúc của user → huỷ nó.
+    await this.battleModel.updateOne(
+      { _id: new Types.ObjectId(draftId), 'players.userId': userId },
+      { status: BattleStatus.CANCELLED },
+    );
+    return { success: true };
+  }
+
   async getActivity(userId: Types.ObjectId): Promise<ActivityEntry[]> {
     const rows = await this.historyModel
       .find({ userId })
@@ -239,6 +273,61 @@ export class HistoryService {
       createdAt: row.createdAt?.toISOString() ?? '',
       metadata: row.metadata ?? {},
     }));
+  }
+
+  async getTracking(userId: Types.ObjectId): Promise<TrackingResponse> {
+    // "Anomalies" = các node đang làm dở mà user gặp lỗi (wrongCount > 0) hoặc bị tạm khoá.
+    const rows = await this.progressModel
+      .find({
+        userId,
+        status: {
+          $in: [NodeStatus.CURRENT, NodeStatus.OPEN, NodeStatus.TEMP_LOCKED],
+        },
+      })
+      .sort({ wrongCount: -1, lastAttemptAt: -1, updatedAt: -1 })
+      .limit(50)
+      .populate('nodeId')
+      .lean<PopulatedProgress[]>();
+
+    const anomalies = rows.filter(
+      (row) =>
+        (row.wrongCount ?? 0) > 0 || row.status === NodeStatus.TEMP_LOCKED,
+    );
+
+    const errorChronology: ErrorItem[] = anomalies.map((row) => {
+      const node = row.nodeId;
+      const wrong = row.wrongCount ?? 0;
+      const context =
+        row.status === NodeStatus.TEMP_LOCKED
+          ? 'Temporarily locked after too many wrong submissions'
+          : (node?.description?.slice(0, 80) ??
+            node?.tags?.[0] ??
+            `${wrong} wrong attempt${wrong === 1 ? '' : 's'}`);
+      return {
+        id: String(row._id),
+        icon: row.status === NodeStatus.TEMP_LOCKED ? 'lock' : 'bug_report',
+        title: node?.title ?? 'Untitled Quest',
+        context,
+      };
+    });
+
+    const worst = anomalies[0];
+    const advice: AdviceData | null = worst
+      ? {
+          weakness:
+            worst.nodeId?.tags?.[0] ??
+            worst.nodeId?.title ??
+            'Repeated mistakes on an active quest',
+          suggestedTitle: worst.nodeId?.title ?? 'Review your current quest',
+          suggestedNodeId: worst.nodeId?._id ? String(worst.nodeId._id) : null,
+        }
+      : null;
+
+    return {
+      totalActive: errorChronology.length,
+      errorChronology,
+      advice,
+    };
   }
 
   private nodeIcon(type?: NodeType): string {

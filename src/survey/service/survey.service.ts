@@ -6,6 +6,7 @@ import { UsersService } from '../../users/service/users.service';
 import {
   CareerPathDto,
   DisciplineDto,
+  SkillTestRunDto,
   SkillTestStartDto,
   SkillTestSubmitDto,
 } from '../dto/survey.dto';
@@ -53,6 +54,7 @@ export class SurveyService {
   async startSkillTest(userId: Types.ObjectId, dto: SkillTestStartDto) {
     const problems = await this.skillTest.pickCodingProblems(
       dto.fieldFocus,
+      dto.selfAssessedLevel,
       dto.questionCount ?? 3,
     );
     if (problems.length === 0) {
@@ -74,6 +76,21 @@ export class SurveyService {
     }));
     await draft.save();
     return { problems, totalProblems: problems.length };
+  }
+
+  async runSkillTest(userId: Types.ObjectId, dto: SkillTestRunDto) {
+    const draft = await this.getOrCreateDraft(userId);
+    const assignedSet = new Set(
+      draft.technicalTestAnswers.map((answer) => answer.questionId.toString()),
+    );
+
+    if (!assignedSet.has(dto.questionId)) {
+      throw new BadRequestException(
+        `Question ${dto.questionId} is not part of this skill test`,
+      );
+    }
+
+    return this.skillTest.runSolution(dto.questionId, dto.code);
   }
 
   async submitSkillTest(

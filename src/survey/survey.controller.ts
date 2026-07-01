@@ -14,6 +14,7 @@ import { JwtAuthGuard } from '../common/guard/jwt-auth.guard';
 import {
   CareerPathDto,
   DisciplineDto,
+  SkillTestRunDto,
   SkillTestStartDto,
   SkillTestSubmitDto,
 } from './dto/survey.dto';
@@ -45,6 +46,18 @@ export class SurveyController {
     @Body() dto: SkillTestStartDto,
   ) {
     return this.survey.startSkillTest(userId, dto);
+  }
+
+  @Post('skill-test/run')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Chạy sample test cho 1 bài trong survey coding workspace',
+  })
+  runSkillTest(
+    @CurrentUser('userId') userId: Types.ObjectId,
+    @Body() dto: SkillTestRunDto,
+  ) {
+    return this.survey.runSkillTest(userId, dto);
   }
 
   @Post('skill-test/submit')

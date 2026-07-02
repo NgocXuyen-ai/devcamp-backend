@@ -7,6 +7,10 @@ import {
   QuestionDocument,
 } from '../../exercises/schemas/question.schema';
 import { CodeRunnerService } from './code-runner.service';
+import {
+  SURVEY_PROBLEM_BANK,
+  SurveyCodingProblemDefinition,
+} from './survey-problems.data';
 
 /** Test case shown to the client (hidden ones are kept server-side) */
 export interface PublicTestCase {
@@ -75,12 +79,17 @@ export interface SkillTestRunResult {
   cases: SkillTestCaseRunResult[];
 }
 
-const MAX_PROBLEMS = 3;
+export interface CodingProblemPoolSnapshot {
+  poolSize: number;
+  poolBreakdown: Partial<Record<CareerField, number>>;
+}
+
+const MAX_PROBLEMS = 5;
 const DEFAULT_PROBLEM_COUNT_BY_LEVEL: Record<SkillLevel, number> = {
-  [SkillLevel.NOVICE]: 1,
-  [SkillLevel.APPRENTICE]: 2,
-  [SkillLevel.JOURNEYMAN]: 3,
-  [SkillLevel.MASTER]: 3,
+  [SkillLevel.NOVICE]: 5,
+  [SkillLevel.APPRENTICE]: 5,
+  [SkillLevel.JOURNEYMAN]: 5,
+  [SkillLevel.MASTER]: 5,
 };
 const LEVEL_ORDER = [
   SkillLevel.NOVICE,
@@ -97,304 +106,6 @@ function solve(input) {
   // TODO: write your solution
 }
 `;
-
-type SurveyCodingProblemDefinition = {
-  _id: Types.ObjectId;
-  field: CareerField.FRONTEND | CareerField.BACKEND;
-  targetSkillLevel: SkillLevel;
-  title: string;
-  content: string;
-  difficulty: 'easy' | 'medium' | 'hard';
-  starterCode: string;
-  timeLimitSeconds: number;
-  testCases: Array<{
-    input: string;
-    expectedOutput: string;
-    explanation?: string;
-    isHidden?: boolean;
-  }>;
-};
-
-const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
-  {
-    _id: new Types.ObjectId('66f000000000000000000101'),
-    field: CareerField.FRONTEND,
-    targetSkillLevel: SkillLevel.NOVICE,
-    difficulty: 'easy',
-    title: 'Normalize Button Labels',
-    content:
-      'Viết `solve(labels)` nhận vào một mảng string và trả về một mảng mới.\n\nYêu cầu:\n- trim khoảng trắng đầu/cuối\n- bỏ phần tử rỗng sau khi trim\n- chuyển toàn bộ label sang lowercase\n- giữ nguyên thứ tự phần tử hợp lệ',
-    starterCode: `function solve(labels) {
-  if (!Array.isArray(labels)) return [];
-
-  return labels;
-}
-`,
-    timeLimitSeconds: 240,
-    testCases: [
-      {
-        input: '["  Save  "," Cancel ","   "]',
-        expectedOutput: '["save","cancel"]',
-        explanation: 'Loại bỏ khoảng trắng và phần tử rỗng.',
-      },
-      {
-        input: '[" Sign Up ","Login"]',
-        expectedOutput: '["sign up","login"]',
-        isHidden: true,
-      },
-    ],
-  },
-  {
-    _id: new Types.ObjectId('66f000000000000000000102'),
-    field: CareerField.FRONTEND,
-    targetSkillLevel: SkillLevel.APPRENTICE,
-    difficulty: 'medium',
-    title: 'Build Filter Summary',
-    content:
-      'Viết `solve(filters)` nhận vào object filter và trả về object summary.\n\nInput ví dụ:\n`{ search: " react ", tags: ["ui", "", "hooks"], page: 3 }`\n\nOutput mong muốn:\n`{ query: "react", activeTagCount: 2, page: 3, hasActiveFilters: true }`\n\nQuy tắc:\n- `query` = chuỗi search sau khi trim\n- `activeTagCount` = số tag không rỗng\n- `page` = số page hợp lệ, mặc định 1 nếu thiếu hoặc <= 0\n- `hasActiveFilters` = true nếu có query hoặc có ít nhất 1 tag hợp lệ',
-    starterCode: `function solve(filters) {
-  const source = filters ?? {};
-
-  return {
-    query: "",
-    activeTagCount: 0,
-    page: 1,
-    hasActiveFilters: false,
-  };
-}
-`,
-    timeLimitSeconds: 300,
-    testCases: [
-      {
-        input: '[{"search":" react ","tags":["ui","","hooks"],"page":3}]',
-        expectedOutput:
-          '{"query":"react","activeTagCount":2,"page":3,"hasActiveFilters":true}',
-        explanation: 'Có search, có 2 tag hợp lệ và page = 3.',
-      },
-      {
-        input: '[{"search":"   ","tags":["",""],"page":0}]',
-        expectedOutput:
-          '{"query":"","activeTagCount":0,"page":1,"hasActiveFilters":false}',
-        isHidden: true,
-      },
-    ],
-  },
-  {
-    _id: new Types.ObjectId('66f000000000000000000103'),
-    field: CareerField.FRONTEND,
-    targetSkillLevel: SkillLevel.JOURNEYMAN,
-    difficulty: 'medium',
-    title: 'Compose Lesson Progress Snapshot',
-    content:
-      'Viết `solve(lessons)` nhận vào mảng lesson có dạng `{ id, status, durationMinutes }`.\n\nTrả về object `{ totalLessons, completedLessons, inProgressLessons, totalMinutes, completionRate }`.\n\nQuy tắc:\n- `completedLessons` = số lesson có `status === "completed"`\n- `inProgressLessons` = số lesson có `status === "in_progress"`\n- `totalMinutes` = tổng `durationMinutes` hợp lệ (> 0)\n- `completionRate` = làm tròn phần trăm hoàn thành từ 0 đến 100',
-    starterCode: `function solve(lessons) {
-  const items = Array.isArray(lessons) ? lessons : [];
-
-  return {
-    totalLessons: 0,
-    completedLessons: 0,
-    inProgressLessons: 0,
-    totalMinutes: 0,
-    completionRate: 0,
-  };
-}
-`,
-    timeLimitSeconds: 330,
-    testCases: [
-      {
-        input:
-          '[[{"id":"l1","status":"completed","durationMinutes":20},{"id":"l2","status":"in_progress","durationMinutes":15},{"id":"l3","status":"completed","durationMinutes":25}]]',
-        expectedOutput:
-          '{"totalLessons":3,"completedLessons":2,"inProgressLessons":1,"totalMinutes":60,"completionRate":67}',
-        explanation:
-          'Tính đủ số lượng lesson, tổng thời gian và phần trăm hoàn thành.',
-      },
-      {
-        input:
-          '[[{"id":"l1","status":"todo","durationMinutes":0},{"id":"l2","status":"completed","durationMinutes":10}]]',
-        expectedOutput:
-          '{"totalLessons":2,"completedLessons":1,"inProgressLessons":0,"totalMinutes":10,"completionRate":50}',
-        isHidden: true,
-      },
-    ],
-  },
-  {
-    _id: new Types.ObjectId('66f000000000000000000104'),
-    field: CareerField.FRONTEND,
-    targetSkillLevel: SkillLevel.MASTER,
-    difficulty: 'hard',
-    title: 'Merge Notification Feed',
-    content:
-      'Viết `solve(currentItems, incomingItems)` để merge hai mảng notification.\n\nMỗi item có dạng `{ id, createdAt, read }`.\n\nYêu cầu:\n- giữ item duy nhất theo `id`\n- nếu cùng `id`, ưu tiên item từ `incomingItems`\n- sort giảm dần theo `createdAt`\n- trả về object `{ items, unreadCount }`',
-    starterCode: `function solve(currentItems, incomingItems) {
-  const current = Array.isArray(currentItems) ? currentItems : [];
-  const incoming = Array.isArray(incomingItems) ? incomingItems : [];
-
-  return {
-    items: current,
-    unreadCount: 0,
-  };
-}
-`,
-    timeLimitSeconds: 360,
-    testCases: [
-      {
-        input:
-          '[[{"id":"n1","createdAt":1,"read":true},{"id":"n2","createdAt":3,"read":false}],[{"id":"n2","createdAt":4,"read":false},{"id":"n3","createdAt":2,"read":true}]]',
-        expectedOutput:
-          '{"items":[{"id":"n2","createdAt":4,"read":false},{"id":"n3","createdAt":2,"read":true},{"id":"n1","createdAt":1,"read":true}],"unreadCount":1}',
-        explanation:
-          'Item n2 từ incoming ghi đè item cũ và danh sách được sort giảm dần.',
-      },
-      {
-        input: '[[],[{"id":"n1","createdAt":10,"read":false}]]',
-        expectedOutput:
-          '{"items":[{"id":"n1","createdAt":10,"read":false}],"unreadCount":1}',
-        isHidden: true,
-      },
-    ],
-  },
-  {
-    _id: new Types.ObjectId('66f000000000000000000201'),
-    field: CareerField.BACKEND,
-    targetSkillLevel: SkillLevel.NOVICE,
-    difficulty: 'easy',
-    title: 'Normalize Query Params',
-    content:
-      'Viết `solve(query)` nhận vào object query params và trả về object chuẩn hóa.\n\nYêu cầu:\n- `page` và `limit` phải là số nguyên dương, mặc định `page = 1`, `limit = 20`\n- `search` là string đã trim\n- output: `{ page, limit, search }`',
-    starterCode: `function solve(query) {
-  const source = query ?? {};
-
-  return {
-    page: 1,
-    limit: 20,
-    search: "",
-  };
-}
-`,
-    timeLimitSeconds: 240,
-    testCases: [
-      {
-        input: '[{"page":"2","limit":"5","search":" api "}]',
-        expectedOutput: '{"page":2,"limit":5,"search":"api"}',
-        explanation: 'Query hợp lệ được parse sang kiểu đúng.',
-      },
-      {
-        input: '[{"page":"0","limit":"-1","search":"   "}]',
-        expectedOutput: '{"page":1,"limit":20,"search":""}',
-        isHidden: true,
-      },
-    ],
-  },
-  {
-    _id: new Types.ObjectId('66f000000000000000000202'),
-    field: CareerField.BACKEND,
-    targetSkillLevel: SkillLevel.APPRENTICE,
-    difficulty: 'medium',
-    title: 'Build API Response Envelope',
-    content:
-      'Viết `solve(input)` nhận vào object `{ ok, data, error, traceId }` và trả về response envelope chuẩn.\n\nQuy tắc:\n- nếu `ok === true` => `{ status: 200, body: { data, error: null, traceId } }`\n- nếu `ok === false` => `{ status: 400, body: { data: null, error, traceId } }`\n- nếu thiếu `traceId` thì dùng `"generated-trace"`',
-    starterCode: `function solve(input) {
-  const source = input ?? {};
-
-  return {
-    status: 200,
-    body: {
-      data: null,
-      error: null,
-      traceId: "generated-trace",
-    },
-  };
-}
-`,
-    timeLimitSeconds: 300,
-    testCases: [
-      {
-        input:
-          '[{"ok":true,"data":{"id":"u1"},"error":null,"traceId":"abc-123"}]',
-        expectedOutput:
-          '{"status":200,"body":{"data":{"id":"u1"},"error":null,"traceId":"abc-123"}}',
-        explanation: 'Nhánh success giữ nguyên data và traceId.',
-      },
-      {
-        input: '[{"ok":false,"error":"invalid payload"}]',
-        expectedOutput:
-          '{"status":400,"body":{"data":null,"error":"invalid payload","traceId":"generated-trace"}}',
-        isHidden: true,
-      },
-    ],
-  },
-  {
-    _id: new Types.ObjectId('66f000000000000000000203'),
-    field: CareerField.BACKEND,
-    targetSkillLevel: SkillLevel.JOURNEYMAN,
-    difficulty: 'medium',
-    title: 'Aggregate API Metrics',
-    content:
-      'Viết `solve(requests)` nhận vào mảng request `{ path, durationMs, statusCode }`.\n\nTrả về object `{ totalRequests, averageDurationMs, errorCount, slowestPath }`.\n\nQuy tắc:\n- `averageDurationMs` = làm tròn số trung bình duration\n- `errorCount` = số request có `statusCode >= 400`\n- `slowestPath` = `path` của request có `durationMs` lớn nhất; nếu rỗng thì `""`',
-    starterCode: `function solve(requests) {
-  const items = Array.isArray(requests) ? requests : [];
-
-  return {
-    totalRequests: 0,
-    averageDurationMs: 0,
-    errorCount: 0,
-    slowestPath: "",
-  };
-}
-`,
-    timeLimitSeconds: 330,
-    testCases: [
-      {
-        input:
-          '[[{"path":"/users","durationMs":120,"statusCode":200},{"path":"/orders","durationMs":300,"statusCode":500},{"path":"/health","durationMs":50,"statusCode":200}]]',
-        expectedOutput:
-          '{"totalRequests":3,"averageDurationMs":157,"errorCount":1,"slowestPath":"/orders"}',
-        explanation: 'Tính trung bình duration, số lỗi và endpoint chậm nhất.',
-      },
-      {
-        input: '[[]]',
-        expectedOutput:
-          '{"totalRequests":0,"averageDurationMs":0,"errorCount":0,"slowestPath":""}',
-        isHidden: true,
-      },
-    ],
-  },
-  {
-    _id: new Types.ObjectId('66f000000000000000000204'),
-    field: CareerField.BACKEND,
-    targetSkillLevel: SkillLevel.MASTER,
-    difficulty: 'hard',
-    title: 'Group Job Retries',
-    content:
-      'Viết `solve(jobs)` nhận vào mảng job `{ id, queue, attempts, maxAttempts }`.\n\nTrả về object:\n- `ready`: danh sách `id` có thể retry tiếp (`attempts < maxAttempts`)\n- `deadLetter`: danh sách `id` đã vượt quota retry\n- `summaryByQueue`: object đếm tổng số job theo từng queue',
-    starterCode: `function solve(jobs) {
-  const items = Array.isArray(jobs) ? jobs : [];
-
-  return {
-    ready: [],
-    deadLetter: [],
-    summaryByQueue: {},
-  };
-}
-`,
-    timeLimitSeconds: 360,
-    testCases: [
-      {
-        input:
-          '[[{"id":"j1","queue":"email","attempts":1,"maxAttempts":3},{"id":"j2","queue":"email","attempts":3,"maxAttempts":3},{"id":"j3","queue":"sync","attempts":0,"maxAttempts":2}]]',
-        expectedOutput:
-          '{"ready":["j1","j3"],"deadLetter":["j2"],"summaryByQueue":{"email":2,"sync":1}}',
-        explanation: 'Phân loại retry và tổng hợp theo queue.',
-      },
-      {
-        input: '[[]]',
-        expectedOutput: '{"ready":[],"deadLetter":[],"summaryByQueue":{}}',
-        isHidden: true,
-      },
-    ],
-  },
-];
 
 @Injectable()
 export class SkillTestService {
@@ -427,6 +138,29 @@ export class SkillTestService {
     );
   }
 
+  getProblemPoolSnapshot(
+    field: CareerField,
+    selectedLevel: SkillLevel,
+  ): CodingProblemPoolSnapshot {
+    const levelPool = SURVEY_PROBLEM_BANK.filter(
+      (problem) =>
+        problem.targetSkillLevel === selectedLevel &&
+        (field === CareerField.FULLSTACK || problem.field === field),
+    );
+
+    const poolBreakdown = levelPool.reduce<
+      Partial<Record<CareerField, number>>
+    >((acc, problem) => {
+      acc[problem.field] = (acc[problem.field] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    return {
+      poolSize: levelPool.length,
+      poolBreakdown,
+    };
+  }
+
   /**
    * Grade the submitted solutions against the question test cases (JS
    * only, no AI). Assigned questions left unsubmitted count as 0 passed.
@@ -435,6 +169,7 @@ export class SkillTestService {
   async grade(
     assignedQuestionIds: Types.ObjectId[],
     solutions: CodeSolution[],
+    selectedLevel?: SkillLevel,
   ): Promise<GradeResult> {
     const solutionMap = new Map(solutions.map((s) => [s.questionId, s]));
 
@@ -484,12 +219,10 @@ export class SkillTestService {
       ? Math.round((passedTestCases / totalTestCases) * 100)
       : 0;
 
-    const computedEntryLevel: LessonLevel =
-      scorePercent >= 80
-        ? LessonLevel.ADVANCED
-        : scorePercent >= 60
-          ? LessonLevel.INTERMEDIATE
-          : LessonLevel.ROOT;
+    const computedEntryLevel = this.computeEntryLevel(
+      scorePercent,
+      selectedLevel,
+    );
 
     return {
       passedTestCases,
@@ -592,6 +325,15 @@ export class SkillTestService {
     };
   }
 
+  private shuffle<T>(array: T[]): T[] {
+    const result = [...array];
+    for (let i = result.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+  }
+
   private pickFallbackProblems(
     field: CareerField,
     selectedLevel: SkillLevel,
@@ -607,35 +349,38 @@ export class SkillTestService {
         (field === CareerField.FULLSTACK || problem.field === field),
     );
 
-    const rankCandidates = (items: SurveyCodingProblemDefinition[]) =>
-      items.slice().sort((a, b) => {
-        const distanceDiff =
-          this.getLevelDistance(a.targetSkillLevel, selectedLevel) -
-          this.getLevelDistance(b.targetSkillLevel, selectedLevel);
-        if (distanceDiff !== 0) return distanceDiff;
-
-        const levelOrderDiff =
-          LEVEL_ORDER.indexOf(a.targetSkillLevel) -
-          LEVEL_ORDER.indexOf(b.targetSkillLevel);
-        if (levelOrderDiff !== 0) return levelOrderDiff;
-
-        const difficultyRank = { easy: 1, medium: 2, hard: 3 };
-        const difficultyDiff =
-          difficultyRank[a.difficulty] - difficultyRank[b.difficulty];
-        if (difficultyDiff !== 0) return difficultyDiff;
-
-        return a.title.localeCompare(b.title);
-      });
-
-    if (field !== CareerField.FULLSTACK) {
-      return rankCandidates(pool).slice(0, size);
+    // Group by level distance
+    const groups: Record<number, SurveyCodingProblemDefinition[]> = {};
+    for (const problem of pool) {
+      const dist = this.getLevelDistance(problem.targetSkillLevel, selectedLevel);
+      if (!groups[dist]) {
+        groups[dist] = [];
+      }
+      groups[dist].push(problem);
     }
 
-    const frontendQueue = rankCandidates(
-      pool.filter((problem) => problem.field === CareerField.FRONTEND),
+    // Sort distance keys ascending
+    const dists = Object.keys(groups)
+      .map(Number)
+      .sort((a, b) => a - b);
+
+    // Shuffle within each distance group
+    const orderedCandidates: SurveyCodingProblemDefinition[] = [];
+    for (const dist of dists) {
+      const shuffledGroup = this.shuffle(groups[dist]);
+      orderedCandidates.push(...shuffledGroup);
+    }
+
+    if (field !== CareerField.FULLSTACK) {
+      return orderedCandidates.slice(0, size);
+    }
+
+    // For fullstack, we still want a mix of frontend and backend
+    const frontendQueue = orderedCandidates.filter(
+      (problem) => problem.field === CareerField.FRONTEND,
     );
-    const backendQueue = rankCandidates(
-      pool.filter((problem) => problem.field === CareerField.BACKEND),
+    const backendQueue = orderedCandidates.filter(
+      (problem) => problem.field === CareerField.BACKEND,
     );
 
     const picked: SurveyCodingProblemDefinition[] = [];
@@ -688,8 +433,46 @@ export class SkillTestService {
     return Math.min(Math.max(desired, 1), MAX_PROBLEMS);
   }
 
+  /**
+   * Placement rule for survey → learning path:
+   * - Beginner-targeted tests stay at Beginner.
+   * - Intermediate-targeted tests:
+   *   - exactly 50% or below -> Beginner
+   *   - above 50% -> Intermediate
+   * - Advanced-targeted tests:
+   *   - 50% or above -> Advanced
+   *   - below 50% -> Intermediate
+   */
+  computeEntryLevel(
+    scorePercent: number,
+    selectedLevel?: SkillLevel,
+  ): LessonLevel {
+    const normalizedScore = Math.max(0, Math.min(scorePercent, 100));
+    const selectedBand = this.mapSkillLevelToLessonLevel(selectedLevel);
+
+    if (selectedBand === LessonLevel.ADVANCED) {
+      return normalizedScore >= 50
+        ? LessonLevel.ADVANCED
+        : LessonLevel.INTERMEDIATE;
+    }
+
+    if (selectedBand === LessonLevel.INTERMEDIATE) {
+      return normalizedScore > 50
+        ? LessonLevel.INTERMEDIATE
+        : LessonLevel.ROOT;
+    }
+
+    return LessonLevel.ROOT;
+  }
+
   private getLevelDistance(a: SkillLevel, b: SkillLevel) {
     return Math.abs(LEVEL_ORDER.indexOf(a) - LEVEL_ORDER.indexOf(b));
+  }
+
+  private mapSkillLevelToLessonLevel(level?: SkillLevel): LessonLevel {
+    if (level === SkillLevel.MASTER) return LessonLevel.ADVANCED;
+    if (level === SkillLevel.JOURNEYMAN) return LessonLevel.INTERMEDIATE;
+    return LessonLevel.ROOT;
   }
 
   private inferSkillLevelFromDifficulty(difficulty?: string): SkillLevel {

@@ -29,6 +29,6 @@ import {
   ],
   controllers: [LearningPathController],
   providers: [LearningPathService, RoadmapService, RoadmapNodeService],
-  exports: [RoadmapService, RoadmapNodeService],
+  exports: [LearningPathService, RoadmapService, RoadmapNodeService],
 })
 export class LearningPathModule {}

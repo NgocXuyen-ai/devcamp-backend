@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { CareerField, DisciplineLevel } from '../../common/enums';
+import { CareerField, DisciplineLevel, SkillLevel } from '../../common/enums';
+import { LearningPathService } from '../../learning-path/learning-path.service';
 import { UsersService } from '../../users/service/users.service';
 import {
   CareerPathDto,
@@ -23,6 +24,7 @@ export class SurveyService {
     private readonly surveyModel: Model<SurveyResponseDocument>,
     private readonly users: UsersService,
     private readonly skillTest: SkillTestService,
+    private readonly learningPath: LearningPathService,
   ) {}
 
   private async getOrCreateDraft(
@@ -52,10 +54,11 @@ export class SurveyService {
   }
 
   async startSkillTest(userId: Types.ObjectId, dto: SkillTestStartDto) {
+    const selectedLevel = dto.selfAssessedLevel ?? SkillLevel.APPRENTICE;
     const problems = await this.skillTest.pickCodingProblems(
       dto.fieldFocus,
-      dto.selfAssessedLevel,
-      dto.questionCount ?? 3,
+      selectedLevel,
+      dto.questionCount ?? 5,
     );
     if (problems.length === 0) {
       throw new BadRequestException(
@@ -66,7 +69,7 @@ export class SurveyService {
     // validated and re-graded safely.
     const draft = await this.getOrCreateDraft(userId);
     draft.fieldFocus = dto.fieldFocus;
-    if (dto.selfAssessedLevel) draft.selfAssessedLevel = dto.selfAssessedLevel;
+    draft.selfAssessedLevel = selectedLevel;
     if (dto.knownLanguages) draft.knownLanguages = dto.knownLanguages;
     draft.technicalTestAnswers = problems.map((p) => ({
       questionId: p._id,
@@ -75,7 +78,22 @@ export class SurveyService {
       isCorrect: false,
     }));
     await draft.save();
-    return { problems, totalProblems: problems.length };
+    const poolSnapshot = this.skillTest.getProblemPoolSnapshot(
+      dto.fieldFocus,
+      selectedLevel,
+    );
+    return {
+      problems,
+      totalProblems: problems.length,
+      requestedLevel: selectedLevel,
+      requestedQuestionCount: dto.questionCount ?? 5,
+      deliveredQuestionCount: problems.length,
+      poolSize: poolSnapshot.poolSize,
+      poolBreakdown: poolSnapshot.poolBreakdown,
+      fallbackUsed: problems.some(
+        (problem) => problem.targetSkillLevel !== selectedLevel,
+      ),
+    };
   }
 
   async runSkillTest(userId: Types.ObjectId, dto: SkillTestRunDto) {
@@ -111,7 +129,11 @@ export class SurveyService {
       }
     }
 
-    const result = await this.skillTest.grade(assignedIds, dto.solutions);
+    const result = await this.skillTest.grade(
+      assignedIds,
+      dto.solutions,
+      draft.selfAssessedLevel,
+    );
     draft.technicalTestAnswers = result.perQuestion;
     draft.technicalTestScore = result.scorePercent;
     draft.technicalTestTimeSeconds = dto.totalTimeSeconds;
@@ -163,7 +185,12 @@ export class SurveyService {
     user.fieldFocus = draft.fieldFocus;
     user.selfAssessedLevel = draft.selfAssessedLevel;
     user.learningGoal = draft.learningGoal;
+    user.knownLanguages = draft.knownLanguages ?? [];
     await user.save();
+    await this.learningPath.syncSurveyPlacement(
+      userId,
+      draft.computedEntryLevel,
+    );
     await this.users.completeFirstLogin(userId);
 
     return draft;

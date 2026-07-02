@@ -40,7 +40,7 @@ export class SurveyController {
   // Segment 2 — coding mini test
   @Post('skill-test/start')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Lấy 1–3 bài coding mini test (JS) theo field' })
+  @ApiOperation({ summary: 'Lấy 1–5 bài coding mini test (JS) theo field' })
   startSkillTest(
     @CurrentUser('userId') userId: Types.ObjectId,
     @Body() dto: SkillTestStartDto,

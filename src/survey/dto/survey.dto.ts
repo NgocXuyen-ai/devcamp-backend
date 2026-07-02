@@ -50,14 +50,14 @@ export class SkillTestStartDto {
 
   @ApiPropertyOptional({
     minimum: 1,
-    maximum: 3,
-    default: 3,
-    description: 'Số bài coding muốn nhận (1–3)',
+    maximum: 5,
+    default: 5,
+    description: 'Số bài coding muốn nhận (1–5)',
   })
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(3)
+  @Max(5)
   questionCount?: number;
 }
 
@@ -98,7 +98,7 @@ export class SkillTestSubmitDto {
   @ApiProperty({ type: [CodeSolutionItemDto] })
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(3)
+  @ArrayMaxSize(5)
   @ValidateNested({ each: true })
   @Type(() => CodeSolutionItemDto)
   solutions!: CodeSolutionItemDto[];

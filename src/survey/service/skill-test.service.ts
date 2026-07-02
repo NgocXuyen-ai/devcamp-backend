@@ -113,7 +113,7 @@ export class SkillTestService {
     @InjectModel(Question.name)
     private readonly questionModel: Model<QuestionDocument>,
     private readonly codeRunner: CodeRunnerService,
-  ) {}
+  ) { }
 
   /**
    * Pick 1–3 small coding problems matching the user's field focus.
@@ -271,12 +271,10 @@ export class SkillTestService {
       total: selectedTestCases.length,
       notes:
         status === 'Accepted'
-          ? `Passed ${evaluation.passedCount}/${selectedTestCases.length} ${
-              includeHidden ? 'full' : 'sample'
-            } checks.`
-          : `Passed ${evaluation.passedCount}/${selectedTestCases.length} ${
-              includeHidden ? 'full' : 'sample'
-            } checks. Review the failing case(s) below.`,
+          ? `Passed ${evaluation.passedCount}/${selectedTestCases.length} ${includeHidden ? 'full' : 'sample'
+          } checks.`
+          : `Passed ${evaluation.passedCount}/${selectedTestCases.length} ${includeHidden ? 'full' : 'sample'
+          } checks. Review the failing case(s) below.`,
       errorMessage: firstError,
       cases: selectedTestCases.map((testCase, index) => {
         const result = evaluation.results[index];

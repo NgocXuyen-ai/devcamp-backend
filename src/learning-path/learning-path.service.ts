@@ -162,18 +162,28 @@ export class LearningPathService {
   async syncSurveyPlacement(
     userId: Types.ObjectId,
     entryLevel: LessonLevel,
+    fieldFocus?: CareerField,
   ): Promise<void> {
+    const fieldsToSync: CareerField[] = [];
+    if (fieldFocus === CareerField.FULLSTACK || !fieldFocus) {
+      fieldsToSync.push(CareerField.FRONTEND, CareerField.BACKEND);
+    } else if (fieldFocus === CareerField.FRONTEND) {
+      fieldsToSync.push(CareerField.FRONTEND);
+    } else if (fieldFocus === CareerField.BACKEND) {
+      fieldsToSync.push(CareerField.BACKEND);
+    }
+
     const roadmaps = await this.roadmapModel
       .find({
         field: {
-          $in: [CareerField.FRONTEND, CareerField.BACKEND],
+          $in: fieldsToSync,
         },
         isActive: true,
       })
       .sort({ createdAt: -1 });
 
     const selectedRoadmaps: RoadmapWithId[] = [];
-    for (const field of [CareerField.FRONTEND, CareerField.BACKEND]) {
+    for (const field of fieldsToSync) {
       const roadmap = roadmaps.find((item) => item.field === field);
       if (roadmap) {
         selectedRoadmaps.push(roadmap as RoadmapWithId);

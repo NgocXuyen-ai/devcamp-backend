@@ -190,6 +190,7 @@ export class SurveyService {
     await this.learningPath.syncSurveyPlacement(
       userId,
       draft.computedEntryLevel,
+      draft.fieldFocus,
     );
     await this.users.completeFirstLogin(userId);
 

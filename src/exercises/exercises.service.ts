@@ -3,7 +3,9 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Submission, SubmissionDocument } from './schemas/submission.schema';
 import { PracticeEvaluationDto } from './dto/practice-evaluation.dto';
-import { SubmissionStatus as DbSubmissionStatus } from '../common/enums';
+import { SubmissionStatus as DbSubmissionStatus, QuestionDifficulty } from '../common/enums';
+import { User, UserDocument } from '../users/schemas/users.schema';
+import { RoadmapNode, RoadmapNodeDocument } from '../learning-path/schemas/roadmap-node.schema';
 import {
   runExecutableEvaluation,
   supportsExecutableRunner,
@@ -39,6 +41,10 @@ export class ExercisesService {
   constructor(
     @InjectModel(Submission.name)
     private readonly submissionModel: Model<SubmissionDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
+    @InjectModel(RoadmapNode.name)
+    private readonly roadmapNodeModel: Model<RoadmapNodeDocument>,
   ) {}
 
   async run(dto: PracticeEvaluationDto): Promise<JudgeRunResult> {
@@ -53,6 +59,8 @@ export class ExercisesService {
         userId,
       })) + 1;
 
+    const dbStatus = this.toDbSubmissionStatus(runResult.status);
+
     const created = await this.submissionModel.create({
       userId,
       practiceId: dto.practiceId,
@@ -62,7 +70,7 @@ export class ExercisesService {
       nodeId: this.toObjectId(dto.nodeId),
       language: dto.language,
       code: dto.code,
-      status: this.toDbSubmissionStatus(runResult.status),
+      status: dbStatus,
       score:
         runResult.total === 0
           ? 0
@@ -89,6 +97,12 @@ export class ExercisesService {
       triggeredPenalty: false,
     });
 
+    // ─── Coin reward on first Accepted submission ────────────────────────
+    let coinsEarned = 0;
+    if (dbStatus === DbSubmissionStatus.ACCEPTED) {
+      coinsEarned = await this.awardCoinsForAccepted(userId, created._id as Types.ObjectId, dto);
+    }
+
     const submission = this.toSubmissionRecord(created);
     const submissions = await this.getSubmissions(userId, dto.practiceId);
 
@@ -96,6 +110,7 @@ export class ExercisesService {
       runResult,
       submission,
       submissions,
+      coinsEarned,
     };
   }
 
@@ -821,4 +836,74 @@ export class ExercisesService {
     if (!value || !Types.ObjectId.isValid(value)) return undefined;
     return new Types.ObjectId(value);
   }
+
+  /**
+   * Award coins to user on their FIRST Accepted submission for a given exercise.
+   *
+   * Two-path node lookup:
+   *   1. Via valid MongoDB ObjectId in dto.nodeId  (standard flow when apiNodes loaded)
+   *   2. Via title match on RoadmapNode             (fallback for hardcoded 'f1','b1'... ids)
+   *
+   * Coin amounts: Easy → 100 | Medium → 200 | Hard → 300
+   */
+  private async awardCoinsForAccepted(
+    userId: Types.ObjectId,
+    createdSubmissionId: Types.ObjectId,
+    dto: PracticeEvaluationDto,
+  ): Promise<number> {
+    try {
+      // ── 1. Resolve the RoadmapNode ────────────────────────────────────
+      let roadmapNode = null;
+
+      const nodeObjectId = this.toObjectId(dto.nodeId);
+      if (nodeObjectId) {
+        // Path A: nodeId is a valid MongoDB ObjectId (apiNodes were loaded)
+        roadmapNode = await this.roadmapNodeModel.findById(nodeObjectId).lean();
+      }
+
+      if (!roadmapNode && dto.title) {
+        // Path B: fallback — match by node title (handles hardcoded 'f1' ids)
+        roadmapNode = await this.roadmapNodeModel
+          .findOne({ title: { $regex: new RegExp(`^${dto.title.trim()}$`, 'i') } })
+          .lean();
+      }
+
+      if (!roadmapNode) return 0; // no matching node → no reward
+
+      // ── 2. Check for prior Accepted submission (de-dup guard) ─────────
+      const dedupeFilter: Record<string, unknown> = {
+        userId,
+        status: DbSubmissionStatus.ACCEPTED,
+        _id: { $ne: createdSubmissionId },
+      };
+      if (nodeObjectId) {
+        dedupeFilter.nodeId = nodeObjectId;
+      } else {
+        // Match by practiceId when nodeId is not a real ObjectId
+        dedupeFilter.practiceId = dto.practiceId;
+      }
+
+      const alreadyRewarded = await this.submissionModel.findOne(dedupeFilter).lean();
+      if (alreadyRewarded) return 0; // already got coins for this node
+
+      // ── 3. Calculate & credit coins ───────────────────────────────────
+      const COIN_MAP: Partial<Record<QuestionDifficulty, number>> = {
+        [QuestionDifficulty.EASY]: 100,
+        [QuestionDifficulty.MEDIUM]: 200,
+        [QuestionDifficulty.HARD]: 300,
+      };
+      const coinsReward = COIN_MAP[roadmapNode.difficulty as QuestionDifficulty] ?? 0;
+      if (coinsReward > 0) {
+        await this.userModel.updateOne(
+          { _id: userId },
+          { $inc: { 'gamification.coins': coinsReward } },
+        );
+      }
+      return coinsReward;
+    } catch {
+      // Best-effort — coin errors must never break the submission response
+      return 0;
+    }
+  }
 }
+

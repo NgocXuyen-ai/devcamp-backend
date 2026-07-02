@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Question, QuestionSchema } from '../exercises/schemas/question.schema';
+import { LearningPathModule } from '../learning-path/learning-path.module';
 import { UsersModule } from '../users/users.module';
 import {
   SurveyResponse,
@@ -13,6 +14,7 @@ import { SurveyController } from './survey.controller';
 
 @Module({
   imports: [
+    LearningPathModule,
     UsersModule,
     MongooseModule.forFeature([
       { name: SurveyResponse.name, schema: SurveyResponseSchema },

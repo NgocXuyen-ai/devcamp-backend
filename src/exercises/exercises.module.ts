@@ -7,7 +7,10 @@ import { Submission, SubmissionSchema } from './schemas/submission.schema';
 import { Question, QuestionSchema } from './schemas/question.schema';
 
 import { User, UserSchema } from '../users/schemas/users.schema';
-import { RoadmapNode, RoadmapNodeSchema } from '../learning-path/schemas/roadmap-node.schema';
+import {
+  RoadmapNode,
+  RoadmapNodeSchema,
+} from '../learning-path/schemas/roadmap-node.schema';
 
 @Module({
   imports: [

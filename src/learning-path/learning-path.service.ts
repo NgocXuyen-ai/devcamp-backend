@@ -186,7 +186,7 @@ export class LearningPathService {
     for (const field of fieldsToSync) {
       const roadmap = roadmaps.find((item) => item.field === field);
       if (roadmap) {
-        selectedRoadmaps.push(roadmap as RoadmapWithId);
+        selectedRoadmaps.push(roadmap);
       }
     }
 
@@ -213,7 +213,10 @@ export class LearningPathService {
       roadmapId: roadmap._id,
     });
     const existingByNodeId = new Map(
-      existingProgress.map((progress) => [progress.nodeId.toString(), progress]),
+      existingProgress.map((progress) => [
+        progress.nodeId.toString(),
+        progress,
+      ]),
     );
     const hasMeaningfulProgress = existingProgress.some(
       (progress) =>

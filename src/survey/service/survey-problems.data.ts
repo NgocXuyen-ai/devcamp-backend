@@ -373,7 +373,8 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
         explanation: 'Trường email bị để trống.',
       },
       {
-        input: '[{"username":" ","email":"admin@site.com"}, ["username","email"]]',
+        input:
+          '[{"username":" ","email":"admin@site.com"}, ["username","email"]]',
         expectedOutput: '["username"]',
         isHidden: true,
       },
@@ -396,7 +397,8 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
       {
         input: '[45, 10, 3]',
         expectedOutput: '{"totalPages":5,"hasNext":true,"hasPrev":true}',
-        explanation: 'Tổng 45 items, mỗi trang 10 -> 5 trang. Trang hiện tại 3 có trang kế tiếp và trang trước.',
+        explanation:
+          'Tổng 45 items, mỗi trang 10 -> 5 trang. Trang hiện tại 3 có trang kế tiếp và trang trước.',
       },
       {
         input: '[0, 10, 1]',
@@ -420,13 +422,17 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     timeLimitSeconds: 300,
     testCases: [
       {
-        input: '[[{"role":"admin","name":"A"},{"role":"user","name":"B"},{"role":"admin","name":"C"}], "role"]',
-        expectedOutput: '{"admin":[{"role":"admin","name":"A"},{"role":"admin","name":"C"}],"user":[{"role":"user","name":"B"}]}',
+        input:
+          '[[{"role":"admin","name":"A"},{"role":"user","name":"B"},{"role":"admin","name":"C"}], "role"]',
+        expectedOutput:
+          '{"admin":[{"role":"admin","name":"A"},{"role":"admin","name":"C"}],"user":[{"role":"user","name":"B"}]}',
         explanation: 'Gom các user theo role.',
       },
       {
-        input: '[[{"category":"js","id":1},{"category":"css","id":2}], "category"]',
-        expectedOutput: '{"js":[{"category":"js","id":1}],"css":[{"category":"css","id":2}]}',
+        input:
+          '[[{"category":"js","id":1},{"category":"css","id":2}], "category"]',
+        expectedOutput:
+          '{"js":[{"category":"js","id":1}],"css":[{"category":"css","id":2}]}',
         isHidden: true,
       },
     ],
@@ -498,7 +504,8 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     timeLimitSeconds: 300,
     testCases: [
       {
-        input: '[[{"name":"A","rating":4.5},{"name":"B","rating":3.8},{"name":"C","rating":4.0}], 4.0]',
+        input:
+          '[[{"name":"A","rating":4.5},{"name":"B","rating":3.8},{"name":"C","rating":4.0}], 4.0]',
         expectedOutput: '[{"name":"A","rating":4.5},{"name":"C","rating":4.0}]',
         explanation: 'Sản phẩm B có rating 3.8 < 4.0 bị loại.',
       },
@@ -623,8 +630,10 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     timeLimitSeconds: 330,
     testCases: [
       {
-        input: '[[{"name":"A","age":25},{"name":"B","age":20},{"name":"C","age":30}], "age", "asc"]',
-        expectedOutput: '[{"name":"B","age":20},{"name":"A","age":25},{"name":"C","age":30}]',
+        input:
+          '[[{"name":"A","age":25},{"name":"B","age":20},{"name":"C","age":30}], "age", "asc"]',
+        expectedOutput:
+          '[{"name":"B","age":20},{"name":"A","age":25},{"name":"C","age":30}]',
         explanation: 'Sắp xếp theo tuổi tăng dần.',
       },
       {
@@ -675,13 +684,17 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     timeLimitSeconds: 330,
     testCases: [
       {
-        input: '[[{"id":1,"parent":null,"text":"A"},{"id":2,"parent":1,"text":"B"}]]',
-        expectedOutput: '[{"id":1,"parent":null,"text":"A","children":[{"id":2,"parent":1,"text":"B","children":[]}]}]',
+        input:
+          '[[{"id":1,"parent":null,"text":"A"},{"id":2,"parent":1,"text":"B"}]]',
+        expectedOutput:
+          '[{"id":1,"parent":null,"text":"A","children":[{"id":2,"parent":1,"text":"B","children":[]}]}]',
         explanation: 'Comment B là con của comment A.',
       },
       {
-        input: '[[{"id":2,"parent":1,"text":"B"},{"id":1,"parent":null,"text":"A"}]]',
-        expectedOutput: '[{"id":1,"parent":null,"text":"A","children":[{"id":2,"parent":1,"text":"B","children":[]}]}]',
+        input:
+          '[[{"id":2,"parent":1,"text":"B"},{"id":1,"parent":null,"text":"A"}]]',
+        expectedOutput:
+          '[{"id":1,"parent":null,"text":"A","children":[{"id":2,"parent":1,"text":"B","children":[]}]}]',
         isHidden: true,
       },
     ],
@@ -727,7 +740,8 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     timeLimitSeconds: 330,
     testCases: [
       {
-        input: '[{"name":"John","role":"user"},{"name":"Johnny","role":"user"}]',
+        input:
+          '[{"name":"John","role":"user"},{"name":"Johnny","role":"user"}]',
         expectedOutput: '["name"]',
         explanation: 'Chỉ có name thay đổi từ John sang Johnny.',
       },
@@ -753,12 +767,14 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     timeLimitSeconds: 330,
     testCases: [
       {
-        input: '[[{"t":100,"val":"a"},{"t":150,"val":"b"},{"t":400,"val":"c"}], 200]',
+        input:
+          '[[{"t":100,"val":"a"},{"t":150,"val":"b"},{"t":400,"val":"c"}], 200]',
         expectedOutput: '["b","c"]',
         explanation: 'a cách b 50ms < 200ms nên a bị bỏ, b và c được giữ lại.',
       },
       {
-        input: '[[{"t":10,"val":"x"},{"t":20,"val":"y"},{"t":30,"val":"z"}], 50]',
+        input:
+          '[[{"t":10,"val":"x"},{"t":20,"val":"y"},{"t":30,"val":"z"}], 50]',
         expectedOutput: '["z"]',
         isHidden: true,
       },
@@ -781,7 +797,8 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
       {
         input: '["nextjs tag:frontend tag:ssr"]',
         expectedOutput: '{"query":"nextjs","tags":["frontend","ssr"]}',
-        explanation: 'Trích xuất các tag frontend và ssr, lọc bỏ ra khỏi query search chính.',
+        explanation:
+          'Trích xuất các tag frontend và ssr, lọc bỏ ra khỏi query search chính.',
       },
       {
         input: '["tag:css  grid layout "]',
@@ -900,7 +917,8 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
       {
         input: '[["write a", "write b", "undo", "write c", "redo"]]',
         expectedOutput: 'a c',
-        explanation: 'write a -> "a". write b -> "a b". undo -> "a". write c -> "a c". redo -> "a c" (không có gì kế tiếp để redo).',
+        explanation:
+          'write a -> "a". write b -> "a b". undo -> "a". write c -> "a c". redo -> "a c" (không có gì kế tiếp để redo).',
       },
       {
         input: '[["write hello", "undo", "redo"]]',
@@ -926,7 +944,8 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
       {
         input: '["div.nav ul li#active a:hover"]',
         expectedOutput: '[0,1,3,3]',
-        explanation: '1 id (#active), 3 class/pseudo-class (.nav, :hover), 3 elements (div, ul, li, a? -> div, ul, li, a là 4? active là id. nav là class. hover là pseudo. Thử đếm kỹ: div, ul, li, a là 4. Nên expected là [0, 1, 2, 4] hoặc [0,1,3,3] tùy thuộc cách parse. Ta quy định đơn giản: #active (1 id), .nav & :hover (2 class/pseudo), div & ul & li & a (4 elements). Tức [0,1,2,4]. Let\'s match: [0,1,2,4].',
+        explanation:
+          "1 id (#active), 3 class/pseudo-class (.nav, :hover), 3 elements (div, ul, li, a? -> div, ul, li, a là 4? active là id. nav là class. hover là pseudo. Thử đếm kỹ: div, ul, li, a là 4. Nên expected là [0, 1, 2, 4] hoặc [0,1,3,3] tùy thuộc cách parse. Ta quy định đơn giản: #active (1 id), .nav & :hover (2 class/pseudo), div & ul & li & a (4 elements). Tức [0,1,2,4]. Let's match: [0,1,2,4].",
       },
       {
         input: '["#header .btn"]',
@@ -956,7 +975,8 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
       },
       {
         input: '["**bold** *italic* **bold2**"]',
-        expectedOutput: '<strong>bold</strong> <em>italic</em> <strong>bold2</strong>',
+        expectedOutput:
+          '<strong>bold</strong> <em>italic</em> <strong>bold2</strong>',
         isHidden: true,
       },
     ],
@@ -978,7 +998,8 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
       {
         input: '[["sub click", "emit click 1", "unsub click", "emit click 2"]]',
         expectedOutput: '["clicked 1"]',
-        explanation: 'Đăng ký nhận event click. Nhận 1, hủy đăng ký, nên 2 không nhận.',
+        explanation:
+          'Đăng ký nhận event click. Nhận 1, hủy đăng ký, nên 2 không nhận.',
       },
       {
         input: '[["emit play start", "sub play", "emit play music"]]',
@@ -1056,7 +1077,8 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
       {
         input: '[{"a":["b","c"],"b":["c"],"c":[]}]',
         expectedOutput: '["c","b","a"]',
-        explanation: 'C không phụ thuộc ai load trước, rồi đến B phụ thuộc C, cuối cùng A phụ thuộc B và C.',
+        explanation:
+          'C không phụ thuộc ai load trước, rồi đến B phụ thuộc C, cuối cùng A phụ thuộc B và C.',
       },
       {
         input: '[{"x":["y"],"y":[]}]',
@@ -1080,7 +1102,8 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     timeLimitSeconds: 360,
     testCases: [
       {
-        input: '[{"tag":"div","class":"container","children":[{"tag":"p","class":"text"}]}, "div .text"]',
+        input:
+          '[{"tag":"div","class":"container","children":[{"tag":"p","class":"text"}]}, "div .text"]',
         expectedOutput: '[{"tag":"p","class":"text"}]',
         explanation: 'Tìm thẻ con có tag p và class text nằm trong div.',
       },
@@ -1106,12 +1129,14 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     timeLimitSeconds: 360,
     testCases: [
       {
-        input: '[{"age":17,"email":"bad"}, {"age":{"min":18},"email":{"format":"email"}}]',
+        input:
+          '[{"age":17,"email":"bad"}, {"age":{"min":18},"email":{"format":"email"}}]',
         expectedOutput: '{"age":"Too young","email":"Invalid email"}',
         explanation: 'Tuổi 17 nhỏ hơn min 18, email không chứa @.',
       },
       {
-        input: '[{"age":20,"email":"ok@site.com"}, {"age":{"min":18},"email":{"format":"email"}}]',
+        input:
+          '[{"age":20,"email":"ok@site.com"}, {"age":{"min":18},"email":{"format":"email"}}]',
         expectedOutput: '{}',
         isHidden: true,
       },
@@ -1351,7 +1376,7 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     testCases: [
       {
         input: '["users", ["id", "email"], "status = \'active\'"]',
-        expectedOutput: 'SELECT id, email FROM users WHERE status = \'active\';',
+        expectedOutput: "SELECT id, email FROM users WHERE status = 'active';",
         explanation: 'Ghép chuỗi SQL hoàn chỉnh.',
       },
       {
@@ -1551,9 +1576,12 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     timeLimitSeconds: 300,
     testCases: [
       {
-        input: '[{"db":{"host":"localhost","port":3306}}, {"db":{"port":5432,"user":"postgres"}}]',
-        expectedOutput: '{"db":{"host":"localhost","port":5432,"user":"postgres"}}',
-        explanation: 'Merge đè thuộc tính db.port và giữ lại db.host, bổ sung db.user.',
+        input:
+          '[{"db":{"host":"localhost","port":3306}}, {"db":{"port":5432,"user":"postgres"}}]',
+        expectedOutput:
+          '{"db":{"host":"localhost","port":5432,"user":"postgres"}}',
+        explanation:
+          'Merge đè thuộc tính db.port và giữ lại db.host, bổ sung db.user.',
       },
       {
         input: '[{"api":{"timeout":3000}}, {"api":{"timeout":5000}}]',
@@ -1728,12 +1756,15 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     testCases: [
       {
         input: '[{"tokens":2,"lastRefill":1000}, 5, 10, 1500]',
-        expectedOutput: '{"allowed":true,"bucket":{"tokens":2,"lastRefill":1500}}', // 500s difference * 10/s rate would cap tokens to limitPerSec (10). 10 - cost(5) = 5 left? No, currentTime is 1500, lastRefill is 1000. Wait, let's write a simple test case where 500s refills it fully: 2 + 500s*10 = 5002, capped at 10. 10 >= 5 cost. Cập nhật lastRefill = 1500. tokens left = 5.
-        explanation: 'Token bucket được nạp lại đầy sau 500 giây, cho phép request đi qua.',
+        expectedOutput:
+          '{"allowed":true,"bucket":{"tokens":2,"lastRefill":1500}}', // 500s difference * 10/s rate would cap tokens to limitPerSec (10). 10 - cost(5) = 5 left? No, currentTime is 1500, lastRefill is 1000. Wait, let's write a simple test case where 500s refills it fully: 2 + 500s*10 = 5002, capped at 10. 10 >= 5 cost. Cập nhật lastRefill = 1500. tokens left = 5.
+        explanation:
+          'Token bucket được nạp lại đầy sau 500 giây, cho phép request đi qua.',
       },
       {
         input: '[{"tokens":0,"lastRefill":1000}, 2, 1, 1001]',
-        expectedOutput: '{"allowed":false,"bucket":{"tokens":1,"lastRefill":1001}}', // 1s refill -> 1 token. Cost 2 -> not enough. Tokens left = 1.
+        expectedOutput:
+          '{"allowed":false,"bucket":{"tokens":1,"lastRefill":1001}}', // 1s refill -> 1 token. Cost 2 -> not enough. Tokens left = 1.
         isHidden: true,
       },
     ],
@@ -1753,8 +1784,10 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     timeLimitSeconds: 330,
     testCases: [
       {
-        input: '[["20230101_init.sql", "20230201_users.sql", "20221231_setup.sql"]]',
-        expectedOutput: '["20221231_setup.sql","20230101_init.sql","20230201_users.sql"]',
+        input:
+          '[["20230101_init.sql", "20230201_users.sql", "20221231_setup.sql"]]',
+        expectedOutput:
+          '["20221231_setup.sql","20230101_init.sql","20230201_users.sql"]',
         explanation: 'Sắp xếp chuẩn theo mốc thời gian file.',
       },
       {
@@ -1779,12 +1812,15 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     timeLimitSeconds: 330,
     testCases: [
       {
-        input: '[{"id":1,"name":"A"}, {"type":"object","properties":{"id":{"type":"number"},"name":{"type":"string"}},"required":["id"]}]',
+        input:
+          '[{"id":1,"name":"A"}, {"type":"object","properties":{"id":{"type":"number"},"name":{"type":"string"}},"required":["id"]}]',
         expectedOutput: 'true',
-        explanation: 'Dữ liệu chứa đầy đủ trường required và đúng kiểu dữ liệu.',
+        explanation:
+          'Dữ liệu chứa đầy đủ trường required và đúng kiểu dữ liệu.',
       },
       {
-        input: '[{"name":"A"}, {"type":"object","properties":{"id":{"type":"number"}},"required":["id"]}]',
+        input:
+          '[{"name":"A"}, {"type":"object","properties":{"id":{"type":"number"}},"required":["id"]}]',
         expectedOutput: 'false',
         isHidden: true,
       },
@@ -1831,8 +1867,10 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     timeLimitSeconds: 330,
     testCases: [
       {
-        input: '["users", {"email":"new@site.com","status":"active"}, {"id":42}]',
-        expectedOutput: 'UPDATE users SET email = \'new@site.com\', status = \'active\' WHERE id = 42;',
+        input:
+          '["users", {"email":"new@site.com","status":"active"}, {"id":42}]',
+        expectedOutput:
+          "UPDATE users SET email = 'new@site.com', status = 'active' WHERE id = 42;",
         explanation: 'Khởi tạo câu UPDATE đúng cú pháp.',
       },
       {
@@ -1858,12 +1896,15 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     testCases: [
       {
         input: '["is:open author:john bug fix"]',
-        expectedOutput: '{"filters":{"is":"open","author":"john"},"keywords":["bug","fix"]}',
-        explanation: 'Tách các filter dạng key:value và các keyword tìm kiếm thường.',
+        expectedOutput:
+          '{"filters":{"is":"open","author":"john"},"keywords":["bug","fix"]}',
+        explanation:
+          'Tách các filter dạng key:value và các keyword tìm kiếm thường.',
       },
       {
         input: '["status:pending urgent"]',
-        expectedOutput: '{"filters":{"status":"pending"},"keywords":["urgent"]}',
+        expectedOutput:
+          '{"filters":{"status":"pending"},"keywords":["urgent"]}',
         isHidden: true,
       },
     ],
@@ -1909,7 +1950,8 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     timeLimitSeconds: 330,
     testCases: [
       {
-        input: '["/api/v1/posts/:postId/comments", "/api/v1/posts/99/comments"]',
+        input:
+          '["/api/v1/posts/:postId/comments", "/api/v1/posts/99/comments"]',
         expectedOutput: '{"postId":"99"}',
         explanation: 'Khớp chính xác tham số postId từ URL.',
       },
@@ -2005,7 +2047,8 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     timeLimitSeconds: 360,
     testCases: [
       {
-        input: '[[{"node":"A","hash":100},{"node":"B","hash":200},{"node":"C","hash":300}], 150]',
+        input:
+          '[[{"node":"A","hash":100},{"node":"B","hash":200},{"node":"C","hash":300}], 150]',
         expectedOutput: 'B',
         explanation: 'B có hash 200 >= 150 nên request được route vào B.',
       },
@@ -2032,12 +2075,14 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     testCases: [
       {
         input: '[{"max":2,"active":["c1"],"idle":["c2"]}, "lease"]',
-        expectedOutput: '{"status":"leased","connection":"c2","pool":{"max":2,"active":["c1","c2"],"idle":[]}}',
+        expectedOutput:
+          '{"status":"leased","connection":"c2","pool":{"max":2,"active":["c1","c2"],"idle":[]}}',
         explanation: 'Thuê kết nối c2 đang nhàn rỗi.',
       },
       {
         input: '[{"max":2,"active":["c1","c2"],"idle":[]}, ["release", "c1"]]',
-        expectedOutput: '{"status":"released","connection":"c1","pool":{"max":2,"active":["c2"],"idle":["c1"]}}',
+        expectedOutput:
+          '{"status":"released","connection":"c1","pool":{"max":2,"active":["c2"],"idle":["c1"]}}',
         isHidden: true,
       },
     ],
@@ -2083,12 +2128,14 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     timeLimitSeconds: 360,
     testCases: [
       {
-        input: '["--boundary\\r\\nContent-Disposition: form-data; name=\\"user\\"\\r\\n\\r\\nadmin\\r\\n--boundary--", "boundary"]',
+        input:
+          '["--boundary\\r\\nContent-Disposition: form-data; name=\\"user\\"\\r\\n\\r\\nadmin\\r\\n--boundary--", "boundary"]',
         expectedOutput: '{"user":"admin"}',
         explanation: 'Parse trường user có giá trị admin từ multipart stream.',
       },
       {
-        input: '["--b\\r\\nContent-Disposition: form-data; name=\\"x\\"\\r\\n\\r\\n1\\r\\n--b\\r\\nContent-Disposition: form-data; name=\\"y\\"\\r\\n\\r\\n2\\r\\n--b--", "b"]',
+        input:
+          '["--b\\r\\nContent-Disposition: form-data; name=\\"x\\"\\r\\n\\r\\n1\\r\\n--b\\r\\nContent-Disposition: form-data; name=\\"y\\"\\r\\n\\r\\n2\\r\\n--b--", "b"]',
         expectedOutput: '{"x":"1","y":"2"}',
         isHidden: true,
       },
@@ -2137,7 +2184,8 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
       {
         input: '[{"A":["B","C"],"B":["D"],"C":["D"],"D":[]}, "A", "D"]',
         expectedOutput: '["A","B","D"]',
-        explanation: 'Có hai đường đi A->B->D và A->C->D có độ dài bằng nhau. Chọn A->B->D vì B đi trước C.',
+        explanation:
+          'Có hai đường đi A->B->D và A->C->D có độ dài bằng nhau. Chọn A->B->D vì B đi trước C.',
       },
       {
         input: '[{"A":["B"],"B":[]}, "A", "C"]',
@@ -2161,9 +2209,11 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
     timeLimitSeconds: 360,
     testCases: [
       {
-        input: '[[{"op":"insert","table":"users","data":{"id":1}},{"op":"update","table":"users","data":{"id":1},"error":true}]]',
+        input:
+          '[[{"op":"insert","table":"users","data":{"id":1}},{"op":"update","table":"users","data":{"id":1},"error":true}]]',
         expectedOutput: '{"status":"rolled_back","executed":[]}',
-        explanation: 'Thao tác thứ 2 gặp lỗi nên toàn bộ transaction bị rollback.',
+        explanation:
+          'Thao tác thứ 2 gặp lỗi nên toàn bộ transaction bị rollback.',
       },
       {
         input: '[[{"op":"insert","table":"posts","data":{"id":1}}]]',
@@ -2193,7 +2243,8 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
       },
       {
         input: '["SELECT name FROM clients WHERE id = 1;"]',
-        expectedOutput: '["SELECT","name","FROM","clients","WHERE","id","=","1",";"]',
+        expectedOutput:
+          '["SELECT","name","FROM","clients","WHERE","id","=","1",";"]',
         isHidden: true,
       },
     ],
@@ -2218,7 +2269,8 @@ export const SURVEY_PROBLEM_BANK: SurveyCodingProblemDefinition[] = [
         explanation: 'Token sai định dạng chữ ký.',
       },
       {
-        input: '["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE1MDB9.sig", "key", 1600]',
+        input:
+          '["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE1MDB9.sig", "key", 1600]',
         expectedOutput: '{"valid":false,"reason":"Token expired"}',
         isHidden: true,
       },

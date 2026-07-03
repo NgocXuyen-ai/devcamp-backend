@@ -3,9 +3,15 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Submission, SubmissionDocument } from './schemas/submission.schema';
 import { PracticeEvaluationDto } from './dto/practice-evaluation.dto';
-import { SubmissionStatus as DbSubmissionStatus, QuestionDifficulty } from '../common/enums';
+import {
+  SubmissionStatus as DbSubmissionStatus,
+  QuestionDifficulty,
+} from '../common/enums';
 import { User, UserDocument } from '../users/schemas/users.schema';
-import { RoadmapNode, RoadmapNodeDocument } from '../learning-path/schemas/roadmap-node.schema';
+import {
+  RoadmapNode,
+  RoadmapNodeDocument,
+} from '../learning-path/schemas/roadmap-node.schema';
 import {
   runExecutableEvaluation,
   supportsExecutableRunner,
@@ -100,7 +106,7 @@ export class ExercisesService {
     // ─── Coin reward on first Accepted submission ────────────────────────
     let coinsEarned = 0;
     if (dbStatus === DbSubmissionStatus.ACCEPTED) {
-      coinsEarned = await this.awardCoinsForAccepted(userId, created._id as Types.ObjectId, dto);
+      coinsEarned = await this.awardCoinsForAccepted(userId, created._id, dto);
     }
 
     const submission = this.toSubmissionRecord(created);
@@ -864,7 +870,9 @@ export class ExercisesService {
       if (!roadmapNode && dto.title) {
         // Path B: fallback — match by node title (handles hardcoded 'f1' ids)
         roadmapNode = await this.roadmapNodeModel
-          .findOne({ title: { $regex: new RegExp(`^${dto.title.trim()}$`, 'i') } })
+          .findOne({
+            title: { $regex: new RegExp(`^${dto.title.trim()}$`, 'i') },
+          })
           .lean();
       }
 
@@ -883,7 +891,9 @@ export class ExercisesService {
         dedupeFilter.practiceId = dto.practiceId;
       }
 
-      const alreadyRewarded = await this.submissionModel.findOne(dedupeFilter).lean();
+      const alreadyRewarded = await this.submissionModel
+        .findOne(dedupeFilter)
+        .lean();
       if (alreadyRewarded) return 0; // already got coins for this node
 
       // ── 3. Calculate & credit coins ───────────────────────────────────
@@ -892,7 +902,7 @@ export class ExercisesService {
         [QuestionDifficulty.MEDIUM]: 200,
         [QuestionDifficulty.HARD]: 300,
       };
-      const coinsReward = COIN_MAP[roadmapNode.difficulty as QuestionDifficulty] ?? 0;
+      const coinsReward = COIN_MAP[roadmapNode.difficulty] ?? 0;
       if (coinsReward > 0) {
         await this.userModel.updateOne(
           { _id: userId },
@@ -906,4 +916,3 @@ export class ExercisesService {
     }
   }
 }
-

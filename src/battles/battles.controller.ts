@@ -64,6 +64,11 @@ export class BattlesController {
     return this.battlesService.getLeaderboard(dto);
   }
 
+  @Get('overview')
+  overview() {
+    return this.battlesService.getArenaOverview();
+  }
+
   @Post(':id/submit')
   submit(
     @Param('id') id: string,

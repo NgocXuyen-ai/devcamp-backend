@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 
 import { InjectModel } from '@nestjs/mongoose';
@@ -25,11 +26,13 @@ import { BattleStatus, SubmissionStatus } from '../common/enums';
 
 import { MatchmakingService } from './matchmaking/matchmaking.service';
 import { MockQuestionsService } from './matchmaking/mock-questions.service';
-
-import { BadRequestException } from '@nestjs/common';
 import { SubmitAnswerDto } from './dto/submit-answer.dto';
 
 import { BattlesGateway } from './battles.gateway';
+import {
+  buildArenaOverview,
+  type ArenaOverviewResponse,
+} from './data/arena-overview.data';
 
 export interface LeaderboardRow {
   rank: number;
@@ -91,7 +94,26 @@ export class BattlesService {
     if (!isPlayer) {
       throw new ForbiddenException('You are not player of this battle');
     }
-    return battle;
+
+    return this.buildBattleView(battle);
+  }
+
+  async getArenaOverview(): Promise<ArenaOverviewResponse> {
+    const [rankedProfiles, liveBattles, completedBattles] = await Promise.all([
+      this.rankingModel.countDocuments(),
+      this.battleModel.countDocuments({
+        status: { $in: [BattleStatus.WAITING, BattleStatus.IN_PROGRESS] },
+      }),
+      this.battleModel.countDocuments({
+        status: { $in: [BattleStatus.FINISHED, BattleStatus.CANCELLED] },
+      }),
+    ]);
+
+    return buildArenaOverview({
+      rankedProfiles,
+      liveBattles,
+      completedBattles,
+    });
   }
   async getUserHistory(userId: string, dto: GetHistoryDto) {
     const page = dto.page ?? 1;
@@ -200,8 +222,13 @@ export class BattlesService {
       );
     }
 
+    const normalizedAnswer = dto.answer.trim().toLowerCase();
+    const normalizedExpected = (question.correctAnswer ?? '')
+      .trim()
+      .toLowerCase();
     const isCorrect =
-      dto.answer.trim() === (question.correctAnswer ?? '').trim();
+      normalizedExpected.length > 0 &&
+      normalizedAnswer.includes(normalizedExpected);
 
     const player = battle.players[playerIndex];
     const newScore = isCorrect
@@ -426,5 +453,27 @@ export class BattlesService {
       });
     });
     await Promise.all(updates);
+  }
+
+  private async buildBattleView(
+    battle: BattleDocument | (Battle & { _id: Types.ObjectId }),
+  ) {
+    const questions = (
+      await Promise.all(
+        battle.questionIds.map(async (questionId) =>
+          this.questionsService.findById(String(questionId)),
+        ),
+      )
+    ).filter((question) => question !== null);
+
+    return {
+      ...battle,
+      questions: questions.map((question) => ({
+        questionId: String(question._id),
+        title: question.title,
+        content: question.content,
+        difficulty: question.difficulty,
+      })),
+    };
   }
 }

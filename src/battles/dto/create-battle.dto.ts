@@ -11,7 +11,7 @@ export class CreateBattleDto {
 
   @IsNotEmpty()
   @IsEnum(CareerField, {
-    message: 'field must be FE or BE',
+    message: 'field must be frontend, backend, or fullstack',
   })
   field!: CareerField;
 

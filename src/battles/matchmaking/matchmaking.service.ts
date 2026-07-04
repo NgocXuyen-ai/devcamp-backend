@@ -49,6 +49,8 @@ export class MatchmakingService {
 
     const newPlayer: BattlePlayer = {
       userId: new Types.ObjectId(input.userId),
+      username: input.username,
+      avatar: input.avatar,
       ratingBefore: 1000,
       score: 0,
       passedTestCount: 0,

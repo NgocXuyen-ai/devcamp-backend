@@ -38,6 +38,11 @@ export class ExercisesController {
     return this.exercisesService.submit(getUserIdFromReq(req), dto);
   }
 
+  @Get('progress-summary')
+  getProgressSummary(@Req() req: Request) {
+    return this.exercisesService.getProgressSummary(getUserIdFromReq(req));
+  }
+
   @Get(':practiceId/submissions')
   getSubmissions(@Req() req: Request, @Param('practiceId') practiceId: string) {
     return this.exercisesService.getSubmissions(

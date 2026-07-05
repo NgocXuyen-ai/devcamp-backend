@@ -42,6 +42,33 @@ type SubmissionRecord = {
   notes: string;
 };
 
+type DifficultyBreakdown = {
+  easy: number;
+  medium: number;
+  hard: number;
+};
+
+type ChapterProgressSummary = {
+  chapter: string;
+  breakdown: DifficultyBreakdown;
+};
+
+type ProgressSummaryResponse = {
+  solvedPracticeIds: string[];
+  overall: DifficultyBreakdown;
+  chapters: ChapterProgressSummary[];
+};
+
+const EMPTY_BREAKDOWN = (): DifficultyBreakdown => ({
+  easy: 0,
+  medium: 0,
+  hard: 0,
+});
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 @Injectable()
 export class ExercisesService {
   constructor(
@@ -66,6 +93,7 @@ export class ExercisesService {
       })) + 1;
 
     const dbStatus = this.toDbSubmissionStatus(runResult.status);
+    const normalizedDifficulty = await this.resolveDifficulty(dto);
 
     const created = await this.submissionModel.create({
       userId,
@@ -73,6 +101,7 @@ export class ExercisesService {
       title: dto.title,
       topic: dto.topic,
       track: dto.track,
+      difficulty: normalizedDifficulty,
       nodeId: this.toObjectId(dto.nodeId),
       language: dto.language,
       code: dto.code,
@@ -106,7 +135,12 @@ export class ExercisesService {
     // ─── Coin reward on first Accepted submission ────────────────────────
     let coinsEarned = 0;
     if (dbStatus === DbSubmissionStatus.ACCEPTED) {
-      coinsEarned = await this.awardCoinsForAccepted(userId, created._id, dto);
+      coinsEarned = await this.awardCoinsForAccepted(
+        userId,
+        created._id,
+        dto.practiceId,
+        normalizedDifficulty,
+      );
     }
 
     const submission = this.toSubmissionRecord(created);
@@ -131,6 +165,112 @@ export class ExercisesService {
       .lean();
 
     return items.map((item) => this.toSubmissionRecord(item));
+  }
+
+  async getProgressSummary(
+    userId: Types.ObjectId,
+  ): Promise<ProgressSummaryResponse> {
+    const acceptedSubmissions = await this.submissionModel
+      .find({
+        userId,
+        status: DbSubmissionStatus.ACCEPTED,
+      })
+      .sort({ createdAt: 1, _id: 1 })
+      .select({
+        practiceId: 1,
+        title: 1,
+        topic: 1,
+        difficulty: 1,
+        nodeId: 1,
+      })
+      .lean();
+
+    const solvedByPracticeId = new Map<
+      string,
+      (typeof acceptedSubmissions)[number]
+    >();
+    for (const item of acceptedSubmissions) {
+      if (!solvedByPracticeId.has(item.practiceId)) {
+        solvedByPracticeId.set(item.practiceId, item);
+      }
+    }
+
+    const solvedItems = [...solvedByPracticeId.values()];
+    const nodeIds = solvedItems
+      .map((item) => item.nodeId)
+      .filter(
+        (value): value is Types.ObjectId => value instanceof Types.ObjectId,
+      );
+    const titles = [
+      ...new Set(
+        solvedItems
+          .map((item) => item.title?.trim())
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ];
+
+    const [roadmapNodesById, roadmapNodesByTitle] = await Promise.all([
+      nodeIds.length
+        ? this.roadmapNodeModel
+            .find({ _id: { $in: nodeIds } })
+            .select({ _id: 1, difficulty: 1 })
+            .lean()
+        : Promise.resolve([]),
+      titles.length
+        ? this.roadmapNodeModel
+            .find({ title: { $in: titles } })
+            .select({ title: 1, difficulty: 1 })
+            .lean()
+        : Promise.resolve([]),
+    ]);
+
+    const difficultyByNodeId = new Map(
+      roadmapNodesById.map((item) => [String(item._id), item.difficulty]),
+    );
+    const difficultyByTitle = new Map(
+      roadmapNodesByTitle.map((item) => [
+        item.title.trim().toLowerCase(),
+        item.difficulty,
+      ]),
+    );
+
+    const overall = EMPTY_BREAKDOWN();
+    const chaptersMap = new Map<string, DifficultyBreakdown>();
+    const solvedPracticeIds: string[] = [];
+
+    for (const item of solvedItems) {
+      solvedPracticeIds.push(item.practiceId);
+
+      const topic = item.topic?.trim() || 'General';
+      const difficulty =
+        item.difficulty ??
+        (item.nodeId
+          ? difficultyByNodeId.get(String(item.nodeId))
+          : undefined) ??
+        (item.title
+          ? difficultyByTitle.get(item.title.trim().toLowerCase())
+          : undefined);
+
+      const difficultyKey = this.toDifficultyBreakdownKey(difficulty);
+      if (!difficultyKey) continue;
+
+      overall[difficultyKey] += 1;
+
+      if (!chaptersMap.has(topic)) {
+        chaptersMap.set(topic, EMPTY_BREAKDOWN());
+      }
+      chaptersMap.get(topic)![difficultyKey] += 1;
+    }
+
+    const chapters = [...chaptersMap.entries()]
+      .map(([chapter, breakdown]) => ({ chapter, breakdown }))
+      .sort((a, b) => a.chapter.localeCompare(b.chapter));
+
+    return {
+      solvedPracticeIds,
+      overall,
+      chapters,
+    };
   }
 
   private async evaluate(
@@ -843,72 +983,113 @@ export class ExercisesService {
     return new Types.ObjectId(value);
   }
 
+  private normalizeDifficulty(value?: string | null) {
+    const normalized = value?.trim().toLowerCase();
+    switch (normalized) {
+      case QuestionDifficulty.EASY:
+        return QuestionDifficulty.EASY;
+      case QuestionDifficulty.MEDIUM:
+        return QuestionDifficulty.MEDIUM;
+      case QuestionDifficulty.HARD:
+        return QuestionDifficulty.HARD;
+      default:
+        return undefined;
+    }
+  }
+
+  private toDifficultyBreakdownKey(difficulty?: QuestionDifficulty) {
+    switch (difficulty) {
+      case QuestionDifficulty.EASY:
+        return 'easy' as const;
+      case QuestionDifficulty.MEDIUM:
+        return 'medium' as const;
+      case QuestionDifficulty.HARD:
+        return 'hard' as const;
+      default:
+        return undefined;
+    }
+  }
+
+  private async ensureUserExists(userId: Types.ObjectId) {
+    const existing = await this.userModel.exists({ _id: userId });
+    if (existing) return;
+
+    await this.userModel.create({
+      _id: userId,
+      username: `demo-user-${String(userId).slice(-6)}`,
+      email: `demo-${String(userId).slice(-6)}@codeforglory.local`,
+      isFirstLogin: false,
+      gamification: {
+        coins: 0,
+        xp: 0,
+        level: 1,
+      },
+    });
+  }
+
+  private async resolveDifficulty(
+    dto: PracticeEvaluationDto,
+  ): Promise<QuestionDifficulty | undefined> {
+    const fromPayload = this.normalizeDifficulty(dto.difficulty);
+    if (fromPayload) return fromPayload;
+
+    const nodeObjectId = this.toObjectId(dto.nodeId);
+    if (nodeObjectId) {
+      const roadmapNode = await this.roadmapNodeModel
+        .findById(nodeObjectId)
+        .select({ difficulty: 1 })
+        .lean();
+      if (roadmapNode?.difficulty) return roadmapNode.difficulty;
+    }
+
+    if (!dto.title?.trim()) return undefined;
+
+    const roadmapNode = await this.roadmapNodeModel
+      .findOne({
+        title: {
+          $regex: new RegExp(`^${escapeRegExp(dto.title.trim())}$`, 'i'),
+        },
+      })
+      .select({ difficulty: 1 })
+      .lean();
+
+    return roadmapNode?.difficulty;
+  }
+
   /**
    * Award coins to user on their FIRST Accepted submission for a given exercise.
-   *
-   * Two-path node lookup:
-   *   1. Via valid MongoDB ObjectId in dto.nodeId  (standard flow when apiNodes loaded)
-   *   2. Via title match on RoadmapNode             (fallback for hardcoded 'f1','b1'... ids)
-   *
    * Coin amounts: Easy → 100 | Medium → 200 | Hard → 300
    */
   private async awardCoinsForAccepted(
     userId: Types.ObjectId,
     createdSubmissionId: Types.ObjectId,
-    dto: PracticeEvaluationDto,
+    practiceId: string,
+    difficulty?: QuestionDifficulty,
   ): Promise<number> {
     try {
-      // ── 1. Resolve the RoadmapNode ────────────────────────────────────
-      let roadmapNode = null;
+      const rewardKey = this.toDifficultyBreakdownKey(difficulty);
+      if (!rewardKey) return 0;
 
-      const nodeObjectId = this.toObjectId(dto.nodeId);
-      if (nodeObjectId) {
-        // Path A: nodeId is a valid MongoDB ObjectId (apiNodes were loaded)
-        roadmapNode = await this.roadmapNodeModel.findById(nodeObjectId).lean();
-      }
-
-      if (!roadmapNode && dto.title) {
-        // Path B: fallback — match by node title (handles hardcoded 'f1' ids)
-        roadmapNode = await this.roadmapNodeModel
-          .findOne({
-            title: { $regex: new RegExp(`^${dto.title.trim()}$`, 'i') },
-          })
-          .lean();
-      }
-
-      if (!roadmapNode) return 0; // no matching node → no reward
-
-      // ── 2. Check for prior Accepted submission (de-dup guard) ─────────
-      const dedupeFilter: Record<string, unknown> = {
+      const alreadyRewarded = await this.submissionModel.findOne({
         userId,
         status: DbSubmissionStatus.ACCEPTED,
         _id: { $ne: createdSubmissionId },
-      };
-      if (nodeObjectId) {
-        dedupeFilter.nodeId = nodeObjectId;
-      } else {
-        // Match by practiceId when nodeId is not a real ObjectId
-        dedupeFilter.practiceId = dto.practiceId;
-      }
+        practiceId,
+      });
+      if (alreadyRewarded) return 0;
 
-      const alreadyRewarded = await this.submissionModel
-        .findOne(dedupeFilter)
-        .lean();
-      if (alreadyRewarded) return 0; // already got coins for this node
+      const coinsRewardMap = {
+        easy: 100,
+        medium: 200,
+        hard: 300,
+      } as const;
+      const coinsReward = coinsRewardMap[rewardKey];
+      await this.ensureUserExists(userId);
+      await this.userModel.updateOne(
+        { _id: userId },
+        { $inc: { 'gamification.coins': coinsReward } },
+      );
 
-      // ── 3. Calculate & credit coins ───────────────────────────────────
-      const COIN_MAP: Partial<Record<QuestionDifficulty, number>> = {
-        [QuestionDifficulty.EASY]: 100,
-        [QuestionDifficulty.MEDIUM]: 200,
-        [QuestionDifficulty.HARD]: 300,
-      };
-      const coinsReward = COIN_MAP[roadmapNode.difficulty] ?? 0;
-      if (coinsReward > 0) {
-        await this.userModel.updateOne(
-          { _id: userId },
-          { $inc: { 'gamification.coins': coinsReward } },
-        );
-      }
       return coinsReward;
     } catch {
       // Best-effort — coin errors must never break the submission response

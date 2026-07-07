@@ -104,31 +104,60 @@ export class CodeRunnerService {
 
   /**
    * Wraps user code so the child process:
-   *  1. compiles it via `new Function` (catches SyntaxError cleanly),
-   *  2. grabs the `solve` function it defines,
-   *  3. calls it with the parsed test-case input (await: async solve OK),
+   *  1. compiles the user's `solve` inside a fresh `vm` context that has
+   *     NO access to `require`, `process`, `fs`, `Buffer`, or the outer
+   *     `global` — only standard built-ins (Object, Array, JSON, Math,
+   *     Promise, ...) that `vm.createContext` seeds by default. This is
+   *     the piece that actually stops submitted code from touching the
+   *     filesystem, spawning processes, or making network calls; running
+   *     it as a plain child process alone did NOT provide that isolation
+   *     (`require`/`process` are otherwise available to any Node script,
+   *     which is what `new Function(...)` was giving the user's code).
+   *  2. runs the compiled script with a synchronous `timeout` (belt and
+   *     suspenders on top of the outer execFile timeout — this one also
+   *     catches tight synchronous infinite loops inside `vm`),
+   *  3. calls the extracted `solve` with the parsed test-case input
+   *     (await: async solve OK),
    *  4. prints the result on stdout.
    * User code and input are embedded via JSON.stringify — no injection.
+   *
+   * Caveat (documented, not silently assumed away): `vm` isolates
+   * globals but does NOT provide OS-level memory/CPU limits — a
+   * pathological allocation loop can still pressure the host process.
+   * For stronger isolation (hard memory caps, true process-level
+   * sandboxing) consider running each execution in its own throwaway
+   * container (gVisor/Firecracker) or a dedicated isolate library such
+   * as `isolated-vm`.
    */
   private buildHarness(code: string, input: string): string {
     return `
 'use strict';
-const __print = console.log.bind(console);
+const vm = require('vm');
+
 let __captured = '';
-console.log = (...args) => {
-  __captured +=
-    args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ') +
-    '\\n';
+const __sandbox = {
+  console: {
+    log: (...args) => {
+      __captured +=
+        args
+          .map((a) => (typeof a === 'string' ? a : JSON.stringify(a)))
+          .join(' ') + '\\n';
+    },
+  },
 };
+vm.createContext(__sandbox);
+
 (async () => {
-  const __factory = new Function(
+  const __script = new vm.Script(
     ${JSON.stringify(code)} +
-      '\\n;return typeof solve === "function" ? solve : undefined;',
+      '\\n;typeof solve === "function" ? solve : undefined;',
   );
-  const solve = __factory();
+
+  const solve = __script.runInContext(__sandbox, { timeout: ${RUN_TIMEOUT_MS} });
   if (typeof solve !== 'function') {
     throw new Error('Your code must define a function named "solve"');
   }
+
   const __raw = ${JSON.stringify(input)};
   let __args;
   try {
@@ -137,8 +166,9 @@ console.log = (...args) => {
   } catch {
     __args = [__raw];
   }
+
   const __result = await solve(...__args);
-  __print(
+  console.log(
     __result === undefined
       ? __captured.trimEnd()
       : typeof __result === 'string'

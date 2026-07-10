@@ -22,6 +22,9 @@ export class AiChatSession {
   @Prop({ type: Types.ObjectId, ref: 'Battle' })
   battleId?: Types.ObjectId;
 
+  @Prop({ type: String })
+  contextSummary?: string;
+
   @Prop({ type: String, enum: AIMentorStyle, default: AIMentorStyle.INDIRECT })
   style!: AIMentorStyle;
 

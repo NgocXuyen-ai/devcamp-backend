@@ -6,8 +6,10 @@ export interface IQuestion {
   title: string;
   content: string;
   field: CareerField;
-  difficulty: 'easy' | 'medium' | 'hard';
+  difficulty: string;
+  type?: string;
   testCases?: any[];
+  templates?: any[];
   correctAnswer?: string;
 }
 
@@ -17,4 +19,5 @@ export interface IQuestionService {
     difficulty: string,
     count: number,
   ): Promise<IQuestion[]>;
+  findById(id: string): Promise<IQuestion | null>;
 }

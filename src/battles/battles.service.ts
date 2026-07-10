@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  OnModuleInit,
+  Logger,
 } from '@nestjs/common';
 
 import { InjectModel } from '@nestjs/mongoose';
@@ -24,12 +26,15 @@ import { GetLeaderboardDto } from './dto/get-leaderboard.dto';
 import { BattleStatus, SubmissionStatus } from '../common/enums';
 
 import { MatchmakingService } from './matchmaking/matchmaking.service';
-import { MockQuestionsService } from './matchmaking/mock-questions.service';
+import { Inject } from '@nestjs/common';
+import { IQuestionService } from './interfaces/question.interface';
+import { QUESTION_SERVICE } from '../questions/interfaces/question-service.token';
 
 import { BadRequestException } from '@nestjs/common';
 import { SubmitAnswerDto } from './dto/submit-answer.dto';
 
 import { BattlesGateway } from './battles.gateway';
+import { CodeJudgeService } from '../code-execution/code-judge.service';
 
 export interface LeaderboardRow {
   rank: number;
@@ -46,9 +51,12 @@ export interface LeaderboardRow {
 }
 
 @Injectable()
-export class BattlesService {
+export class BattlesService implements OnModuleInit {
+  private readonly logger = new Logger(BattlesService.name);
   private readonly battleTimers = new Map<string, NodeJS.Timeout>();
   constructor(
+    @Inject(QUESTION_SERVICE)
+    private readonly questionsService: IQuestionService,
     @InjectModel(Battle.name)
     private readonly battleModel: Model<BattleDocument>,
     @InjectModel(BattleSubmission.name)
@@ -56,10 +64,84 @@ export class BattlesService {
     @InjectModel(UserRanking.name)
     private readonly rankingModel: Model<UserRankingDocument>,
     private readonly matchmakingService: MatchmakingService,
-    private readonly questionsService: MockQuestionsService,
+    // private readonly questionsService: MockQuestionsService,
     private readonly gateway: BattlesGateway,
+    private readonly codeJudgeService: CodeJudgeService,
   ) {}
 
+  async onModuleInit() {
+    this.logger.log('🔄 Cleaning up stuck battles...');
+
+    const now = new Date();
+
+    // Case 1: IN_PROGRESS + đã hết expectedEndTime → kết thúc
+    const expiredBattles = await this.battleModel.find({
+      status: BattleStatus.IN_PROGRESS,
+      expectedEndTime: { $lte: now },
+    });
+
+    for (const battle of expiredBattles) {
+      try {
+        await this.endBattle(String(battle._id));
+        this.logger.log(`✅ Ended expired battle: ${String(battle._id)}`);
+      } catch (error) {
+        this.logger.warn(
+          `⚠️ Failed to end battle ${String(battle._id)}: ${String(error)}`,
+        );
+      }
+    }
+
+    // Case 2: IN_PROGRESS + chưa hết expectedEndTime → khôi phục timer
+    const activeBattles = await this.battleModel.find({
+      status: BattleStatus.IN_PROGRESS,
+      expectedEndTime: { $gt: now },
+    });
+
+    for (const battle of activeBattles) {
+      const remainingMs = battle.expectedEndTime!.getTime() - now.getTime();
+      const remainingSeconds = Math.floor(remainingMs / 1000);
+
+      if (remainingSeconds > 0) {
+        this.startBattleTimer(String(String(battle._id)), remainingSeconds);
+        this.logger.log(
+          `🔁 Restored timer for battle ${String(battle._id)} (${remainingSeconds}s left)`,
+        );
+      } else {
+        try {
+          await this.endBattle(String(String(battle._id)));
+          this.logger.log(`✅ Ended battle (edge case): ${String(battle._id)}`);
+        } catch (error: unknown) {
+          this.logger.warn(
+            `⚠️ Failed to end battle ${String(battle._id)}: ${String(error)}`,
+          );
+        }
+      }
+    }
+
+    // Case 3: WAITING quá lâu (> 5 phút) → hủy
+    const staleThreshold = new Date(now.getTime() - 5 * 60 * 1000);
+    const staleBattles = await this.battleModel.find({
+      status: BattleStatus.WAITING,
+      createdAt: { $lte: staleThreshold },
+    });
+
+    if (staleBattles.length > 0) {
+      await this.battleModel.updateMany(
+        { _id: { $in: staleBattles.map((b) => b._id) } },
+        {
+          $set: {
+            status: BattleStatus.CANCELLED,
+            endTime: now,
+          },
+        },
+      );
+      this.logger.log(
+        `🗑️ Cancelled ${staleBattles.length} stale WAITING battles`,
+      );
+    }
+
+    this.logger.log('✅ Cleanup done');
+  }
   async createBattle(
     user: { userId: string; username: string; avatar?: string },
     dto: CreateBattleDto,
@@ -73,7 +155,10 @@ export class BattlesService {
     });
 
     if (battle.status === BattleStatus.IN_PROGRESS) {
-      this.startBattleTimer(String(battle._id), battle.timeLimitSeconds);
+      this.startBattleTimer(
+        String(String(battle._id)),
+        battle.timeLimitSeconds,
+      );
     }
     return battle;
   }
@@ -216,8 +301,52 @@ export class BattlesService {
       );
     }
 
-    const isCorrect =
-      dto.answer.trim() === (question.correctAnswer ?? '').trim();
+    let isCorrect = false;
+    let judgeDetails: {
+      totalTests: number;
+      passedTests: number;
+      testResults: {
+        input: string;
+        expectedOutput: string;
+        actualOutput: string | null;
+        passed: boolean;
+        error: string | null;
+      }[];
+    } | null = null;
+
+    if (question.type === 'coding') {
+      // Lấy starterCode từ templates
+      const templates = question.templates as
+        | { starterCode?: string }[]
+        | undefined;
+      const starterCode = templates?.[0]?.starterCode ?? '';
+      const functionName =
+        this.codeJudgeService.extractFunctionName(starterCode);
+
+      const testCasesData = (question.testCases ?? []) as {
+        input: string;
+        expectedOutput: string;
+      }[];
+
+      const judgeResult = await this.codeJudgeService.judgeCode(
+        dto.answer,
+        functionName,
+        testCasesData,
+        'javascript',
+      );
+
+      isCorrect = judgeResult.isCorrect;
+      judgeDetails = judgeResult;
+    } else {
+      // output_prediction / fill_blank — so sánh string
+      const testCases = question.testCases as
+        | { expectedOutput?: string }[]
+        | undefined;
+      const expectedAnswer = testCases?.[0]?.expectedOutput ?? '';
+
+      isCorrect =
+        dto.answer.trim().toLowerCase() === expectedAnswer.trim().toLowerCase();
+    }
 
     const player = battle.players[playerIndex];
     const newScore = isCorrect
@@ -277,6 +406,7 @@ export class BattlesService {
       currentScore: newScore,
       currentQuestionIndex: correctCount,
       message: isCorrect ? 'Correct' : 'Wrong answer, -3 points',
+      ...(judgeDetails && { judgeDetails }),
     };
   }
 

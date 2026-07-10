@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   ConflictException,
   InternalServerErrorException,
@@ -8,7 +9,8 @@ import { Model, Types } from 'mongoose';
 
 import { Battle, BattleDocument, BattlePlayer } from '../schemas/battle.schema';
 import { BattleMode, BattleStatus, CareerField } from '../../common/enums';
-import { MockQuestionsService } from './mock-questions.service';
+import { IQuestionService } from '../interfaces/question.interface';
+import { QUESTION_SERVICE } from '../../questions/interfaces/question-service.token';
 import { IQuestion } from '../interfaces/question.interface';
 
 interface MatchInput {
@@ -23,8 +25,11 @@ interface MatchInput {
 export class MatchmakingService {
   constructor(
     @InjectModel(Battle.name)
+    @InjectModel(Battle.name)
     private readonly battleModel: Model<BattleDocument>,
-    private readonly questionsService: MockQuestionsService,
+
+    @Inject(QUESTION_SERVICE)
+    private readonly questionsService: IQuestionService,
   ) {}
   // CHECK ACTIVE BATTLE
   async findActiveForUser(userId: string): Promise<BattleDocument | null> {
@@ -89,7 +94,7 @@ export class MatchmakingService {
         $set: {
           status: BattleStatus.IN_PROGRESS,
           startTime: now,
-          endTime: new Date(now.getTime() + timeLimitSeconds * 1000),
+          expectedEndTime: new Date(now.getTime() + timeLimitSeconds * 1000),
           timeLimitSeconds,
           questionIds,
         },

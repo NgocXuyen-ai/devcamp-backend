@@ -78,7 +78,7 @@ export class ExercisesService {
     private readonly userModel: Model<UserDocument>,
     @InjectModel(RoadmapNode.name)
     private readonly roadmapNodeModel: Model<RoadmapNodeDocument>,
-  ) {}
+  ) { }
 
   async run(dto: PracticeEvaluationDto): Promise<JudgeRunResult> {
     return this.evaluate(dto, 'sample');
@@ -212,15 +212,15 @@ export class ExercisesService {
     const [roadmapNodesById, roadmapNodesByTitle] = await Promise.all([
       nodeIds.length
         ? this.roadmapNodeModel
-            .find({ _id: { $in: nodeIds } })
-            .select({ _id: 1, difficulty: 1 })
-            .lean()
+          .find({ _id: { $in: nodeIds } })
+          .select({ _id: 1, difficulty: 1 })
+          .lean()
         : Promise.resolve([]),
       titles.length
         ? this.roadmapNodeModel
-            .find({ title: { $in: titles } })
-            .select({ title: 1, difficulty: 1 })
-            .lean()
+          .find({ title: { $in: titles } })
+          .select({ title: 1, difficulty: 1 })
+          .lean()
         : Promise.resolve([]),
     ]);
 
@@ -340,11 +340,11 @@ export class ExercisesService {
             : `Passed ${passedCount}/${total} backend ${mode === 'full' ? 'full' : 'sample'} checks.`
           : isVi
             ? `Pass ${passedCount}/${total} tiêu chí backend${mode === 'full' ? ' (full)' : ' (sample)'}. Cần sửa: ${failedCases
-                .map((item) => item.title)
-                .join(', ')}.`
+              .map((item) => item.title)
+              .join(', ')}.`
             : `Passed ${passedCount}/${total} backend ${mode === 'full' ? 'full' : 'sample'} checks. Improve: ${failedCases
-                .map((item) => item.title)
-                .join(', ')}.`,
+              .map((item) => item.title)
+              .join(', ')}.`,
       cases,
     };
   }
@@ -932,15 +932,15 @@ export class ExercisesService {
     item:
       | (Submission & { _id?: Types.ObjectId; createdAt?: Date })
       | {
-          _id?: Types.ObjectId;
-          createdAt?: Date;
-          status: DbSubmissionStatus;
-          language: string;
-          runtimeMs?: number;
-          memoryKb?: number;
-          notes?: string;
-          compilerError?: string;
-        },
+        _id?: Types.ObjectId;
+        createdAt?: Date;
+        status: DbSubmissionStatus;
+        language: string;
+        runtimeMs?: number;
+        memoryKb?: number;
+        notes?: string;
+        compilerError?: string;
+      },
   ): SubmissionRecord {
     const statusLabel: Record<DbSubmissionStatus, SubmissionStatusLabel> = {
       [DbSubmissionStatus.PENDING]: 'Wrong Answer',
@@ -986,11 +986,11 @@ export class ExercisesService {
   private normalizeDifficulty(value?: string | null) {
     const normalized = value?.trim().toLowerCase();
     switch (normalized) {
-      case QuestionDifficulty.EASY:
+      case QuestionDifficulty.EASY.toLowerCase():
         return QuestionDifficulty.EASY;
-      case QuestionDifficulty.MEDIUM:
+      case QuestionDifficulty.MEDIUM.toLowerCase():
         return QuestionDifficulty.MEDIUM;
-      case QuestionDifficulty.HARD:
+      case QuestionDifficulty.HARD.toLowerCase():
         return QuestionDifficulty.HARD;
       default:
         return undefined;

@@ -56,6 +56,8 @@ export class CodeJudgeService {
             passed: false,
             error:
               result.compileOutput || result.stderr || result.statusDescription,
+            time: result.time,
+            memory: result.memory,
           });
           continue;
         }
@@ -70,6 +72,8 @@ export class CodeJudgeService {
           actualOutput: actual,
           passed,
           error: null,
+          time: result.time,
+          memory: result.memory,
         });
       } catch (error) {
         testResults.push({
@@ -78,17 +82,30 @@ export class CodeJudgeService {
           actualOutput: null,
           passed: false,
           error: error instanceof Error ? error.message : 'Unknown error',
+          time: null,
+          memory: null,
         });
       }
     }
 
     const passedTests = testResults.filter((t) => t.passed).length;
 
+    const totalMemoryKb = testResults.reduce(
+      (sum, t) => sum + (t.memory ?? 0),
+      0,
+    );
+    const totalRuntimeMs = testResults.reduce(
+      (sum, t) => sum + (t.time ? parseFloat(t.time) * 1000 : 0),
+      0,
+    );
+
     return {
       isCorrect: passedTests === testCases.length,
       totalTests: testCases.length,
       passedTests,
       testResults,
+      totalMemoryKb,
+      totalRuntimeMs: Math.round(totalRuntimeMs),
     };
   }
 

@@ -35,6 +35,7 @@ import { SubmitAnswerDto } from './dto/submit-answer.dto';
 
 import { BattlesGateway } from './battles.gateway';
 import { CodeJudgeService } from '../code-execution/code-judge.service';
+import type { JudgeResult } from '../code-execution/interfaces/judge-result.interface';
 
 export interface LeaderboardRow {
   rank: number;
@@ -167,12 +168,33 @@ export class BattlesService implements OnModuleInit {
       throw new NotFoundException('Battle not found!');
     }
 
-    const battle = await this.battleModel.findById(battleId).lean();
+    const battle = await this.battleModel
+      .findById(battleId)
+      .populate('players.userId', 'username avatar')
+      .lean();
     if (!battle) {
       throw new NotFoundException('Battle not found!');
     }
 
-    const isPlayer = battle.players.some((p) => p.userId.toString() == userId);
+    const players = battle.players.map((p) => {
+      const populated = p.userId as unknown as {
+        _id?: Types.ObjectId;
+        username?: string;
+        avatar?: string;
+      };
+      const uid =
+        typeof p.userId === 'object' && populated._id
+          ? String(populated._id)
+          : String(p.userId);
+      return {
+        ...p,
+        userId: uid,
+        username: populated?.username ?? 'Unknown',
+        avatar: populated?.avatar,
+      };
+    });
+
+    const isPlayer = players.some((p) => p.userId === userId);
     if (!isPlayer) {
       throw new ForbiddenException('You are not player of this battle');
     }
@@ -189,8 +211,43 @@ export class BattlesService implements OnModuleInit {
       }),
     );
 
+    // Aggregate Judge0 stats per player
+    const submissions = await this.submissionModel
+      .find({ battleId: new Types.ObjectId(battleId) })
+      .lean();
+
+    const playerStats = players.map((p) => {
+      const playerSubs = submissions.filter(
+        (s) => s.userId.toString() === p.userId,
+      );
+      const acceptedSubs = playerSubs.filter(
+        (s) => s.status === SubmissionStatus.ACCEPTED,
+      );
+
+      const totalPassedTests = acceptedSubs.reduce(
+        (sum, s) => sum + (s.passedTestCount ?? 0),
+        0,
+      );
+      const totalTests = acceptedSubs.reduce(
+        (sum, s) => sum + (s.totalTestCount ?? 0),
+        0,
+      );
+      const totalMemoryKb = playerSubs.reduce(
+        (sum, s) => sum + (s.memoryKb ?? 0),
+        0,
+      );
+
+      return {
+        ...p,
+        totalPassedTests,
+        totalTests,
+        totalMemoryKb,
+      };
+    });
+
     return {
       ...battle,
+      players: playerStats,
       questions: questions.filter((q) => q !== null),
     };
   }
@@ -302,51 +359,28 @@ export class BattlesService implements OnModuleInit {
     }
 
     let isCorrect = false;
-    let judgeDetails: {
-      totalTests: number;
-      passedTests: number;
-      testResults: {
-        input: string;
-        expectedOutput: string;
-        actualOutput: string | null;
-        passed: boolean;
-        error: string | null;
-      }[];
-    } | null = null;
+    let judgeDetails: JudgeResult | null = null;
 
-    if (question.type === 'coding') {
-      // Lấy starterCode từ templates
-      const templates = question.templates as
-        | { starterCode?: string }[]
-        | undefined;
-      const starterCode = templates?.[0]?.starterCode ?? '';
-      const functionName =
-        this.codeJudgeService.extractFunctionName(starterCode);
+    const templates = question.templates as
+      | { starterCode?: string }[]
+      | undefined;
+    const starterCode = templates?.[0]?.starterCode ?? '';
+    const functionName = this.codeJudgeService.extractFunctionName(starterCode);
 
-      const testCasesData = (question.testCases ?? []) as {
-        input: string;
-        expectedOutput: string;
-      }[];
+    const testCasesData = (question.testCases ?? []) as {
+      input: string;
+      expectedOutput: string;
+    }[];
 
-      const judgeResult = await this.codeJudgeService.judgeCode(
-        dto.answer,
-        functionName,
-        testCasesData,
-        'javascript',
-      );
+    const judgeResult = await this.codeJudgeService.judgeCode(
+      dto.answer,
+      functionName,
+      testCasesData,
+      'javascript',
+    );
 
-      isCorrect = judgeResult.isCorrect;
-      judgeDetails = judgeResult;
-    } else {
-      // output_prediction / fill_blank — so sánh string
-      const testCases = question.testCases as
-        | { expectedOutput?: string }[]
-        | undefined;
-      const expectedAnswer = testCases?.[0]?.expectedOutput ?? '';
-
-      isCorrect =
-        dto.answer.trim().toLowerCase() === expectedAnswer.trim().toLowerCase();
-    }
+    isCorrect = judgeResult.isCorrect;
+    judgeDetails = judgeResult;
 
     const player = battle.players[playerIndex];
     const newScore = isCorrect
@@ -368,6 +402,12 @@ export class BattlesService implements OnModuleInit {
         elapsedSeconds: battle.startTime
           ? Math.floor((Date.now() - battle.startTime.getTime()) / 1000)
           : 0,
+        ...(judgeDetails && {
+          passedTestCount: judgeDetails.passedTests,
+          totalTestCount: judgeDetails.totalTests,
+          memoryKb: judgeDetails.totalMemoryKb,
+          runtimeMs: judgeDetails.totalRuntimeMs,
+        }),
       }),
       this.battleModel.findByIdAndUpdate(battleId, {
         $set: {
@@ -375,6 +415,11 @@ export class BattlesService implements OnModuleInit {
         },
         $inc: {
           [`players.${playerIndex}.submissionCount`]: 1,
+          ...(isCorrect && {
+            [`players.${playerIndex}.passedTestCount`]: judgeDetails
+              ? judgeDetails.passedTests
+              : 1,
+          }),
         },
       }),
     ]);

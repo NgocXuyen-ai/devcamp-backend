@@ -11,8 +11,21 @@ interface GroqChatResponse {
 @Injectable()
 export class GroqQuestionGeneratorProvider implements IQuestionGenerator {
   private readonly logger = new Logger(GroqQuestionGeneratorProvider.name);
-  private readonly apiKey = process.env.GROQ_API_KEY;
+  private readonly apiKeys: string[];
+  private keyIndex = 0;
   private readonly model = 'llama-3.1-8b-instant';
+
+  constructor() {
+    const raw = process.env.GROQ_API_KEYS ?? '';
+    this.apiKeys = raw
+      .split(',')
+      .map((k) => k.trim())
+      .filter(Boolean);
+    if (this.apiKeys.length === 0) {
+      throw new Error('GROQ_API_KEYS is empty');
+    }
+    this.logger.log(`Loaded ${String(this.apiKeys.length)} Groq API keys`);
+  }
   private readonly apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
 
   async generateQuestions(
@@ -24,7 +37,7 @@ export class GroqQuestionGeneratorProvider implements IQuestionGenerator {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.apiKey}`,
+        Authorization: `Bearer ${this.getNextKey()}`,
       },
       body: JSON.stringify({
         model: this.model,
@@ -111,5 +124,11 @@ export class GroqQuestionGeneratorProvider implements IQuestionGenerator {
     }
 
     return valid;
+  }
+
+  private getNextKey(): string {
+    const key = this.apiKeys[this.keyIndex];
+    this.keyIndex = (this.keyIndex + 1) % this.apiKeys.length;
+    return key;
   }
 }

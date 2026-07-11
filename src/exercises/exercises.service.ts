@@ -59,6 +59,28 @@ type ProgressSummaryResponse = {
   chapters: ChapterProgressSummary[];
 };
 
+/** Một ô trong heatmap: ngày (yyyy-MM-dd, theo giờ local server) + số submission trong ngày đó. */
+type ActivityDay = {
+  date: string;
+  count: number;
+};
+
+type ActivityCalendarResponse = {
+  /** Tổng số submission trong khoảng thời gian trả về. */
+  totalSubmissions: number;
+  /** Số ngày riêng biệt có ít nhất 1 submission (kể cả submission fail). */
+  totalActiveDays: number;
+  /** Streak dài nhất từng đạt được, tính trên toàn bộ lịch sử submission. */
+  maxStreak: number;
+  /** Streak hiện tại tính đến hôm nay (0 nếu hôm qua không active và hôm nay cũng chưa). */
+  currentStreak: number;
+  /** Ngày bắt đầu / kết thúc của dải dữ liệu trả về (dùng để FE vẽ đúng số cột tuần). */
+  rangeStart: string;
+  rangeEnd: string;
+  /** Danh sách các ngày có hoạt động, chỉ chứa ngày có count > 0 (ngày trống suy ra ở FE). */
+  days: ActivityDay[];
+};
+
 const EMPTY_BREAKDOWN = (): DifficultyBreakdown => ({
   easy: 0,
   medium: 0,
@@ -165,6 +187,92 @@ export class ExercisesService {
       .lean();
 
     return items.map((item) => this.toSubmissionRecord(item));
+  }
+
+  /**
+   * Heatmap kiểu LeetCode: gom số submission theo từng ngày trong `rangeDays`
+   * ngày gần nhất (mặc định 365, khớp UI "submissions in the past one year").
+   *
+   * Ngày được chốt theo giờ LOCAL của server (không phải UTC), giống hệt cách
+   * `GamificationService.touchStreak` đang tính "hôm nay" — nếu sau này streak
+   * được bật lại, hai nơi sẽ luôn đồng nhất với nhau.
+   */
+  async getActivityCalendar(
+    userId: Types.ObjectId,
+    rangeDays = 365,
+  ): Promise<ActivityCalendarResponse> {
+    const rangeEnd = new Date();
+    rangeEnd.setHours(0, 0, 0, 0);
+
+    const rangeStart = new Date(rangeEnd);
+    rangeStart.setDate(rangeStart.getDate() - (rangeDays - 1));
+
+    // Tính mốc "cuối ngày hôm nay" để bắt được cả submission tạo trong hôm nay.
+    const rangeEndExclusive = new Date(rangeEnd);
+    rangeEndExclusive.setDate(rangeEndExclusive.getDate() + 1);
+
+    const grouped = await this.submissionModel.aggregate<{
+      _id: string;
+      count: number;
+    }>([
+      {
+        $match: {
+          userId,
+          createdAt: { $gte: rangeStart, $lt: rangeEndExclusive },
+        },
+      },
+      {
+        // %Y-%m-%d theo giờ local server (không truyền `timezone` => dùng
+        // system timezone của process, đồng nhất với `new Date().setHours`
+        // ở GamificationService).
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$createdAt' },
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const countByDate = new Map(grouped.map((g) => [g._id, g.count]));
+    const totalSubmissions = grouped.reduce((sum, g) => sum + g.count, 0);
+    const totalActiveDays = grouped.length;
+
+    // Duyệt tuần tự từng ngày trong range để tính streak dựa trên NGÀY LIÊN
+    // TIẾP thực tế (không phụ thuộc field gamification.currentStreak, hiện
+    // chưa có nơi nào trong codebase cập nhật field đó).
+    let runningStreak = 0;
+    let maxStreak = 0;
+    let currentStreak = 0;
+    const cursor = new Date(rangeStart);
+    while (cursor.getTime() < rangeEndExclusive.getTime()) {
+      const key = this.toLocalDateKey(cursor);
+      if (countByDate.has(key)) {
+        runningStreak += 1;
+        maxStreak = Math.max(maxStreak, runningStreak);
+      } else {
+        runningStreak = 0;
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    // currentStreak = streak đang chạy tính đến hết ngày hôm nay.
+    currentStreak = runningStreak;
+
+    const days: ActivityDay[] = grouped.map((g) => ({
+      date: g._id,
+      count: g.count,
+    }));
+
+    return {
+      totalSubmissions,
+      totalActiveDays,
+      maxStreak,
+      currentStreak,
+      rangeStart: this.toLocalDateKey(rangeStart),
+      rangeEnd: this.toLocalDateKey(rangeEnd),
+      days,
+    };
   }
 
   async getProgressSummary(
@@ -995,6 +1103,14 @@ export class ExercisesService {
       default:
         return undefined;
     }
+  }
+
+  /** Format Date -> 'yyyy-MM-dd' theo giờ LOCAL (không dùng toISOString vì nó là UTC). */
+  private toLocalDateKey(date: Date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
 
   private toDifficultyBreakdownKey(difficulty?: QuestionDifficulty) {

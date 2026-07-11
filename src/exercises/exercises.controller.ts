@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -26,7 +27,7 @@ function getUserIdFromReq(req: Request): Types.ObjectId {
 @Controller('exercises')
 @UseGuards(OptionalJwtAuthGuard)
 export class ExercisesController {
-  constructor(private readonly exercisesService: ExercisesService) {}
+  constructor(private readonly exercisesService: ExercisesService) { }
 
   @Post('run')
   run(@Body() dto: PracticeEvaluationDto) {
@@ -41,6 +42,21 @@ export class ExercisesController {
   @Get('progress-summary')
   getProgressSummary(@Req() req: Request) {
     return this.exercisesService.getProgressSummary(getUserIdFromReq(req));
+  }
+
+  // Route tĩnh 'activity-calendar' PHẢI đứng trước ':practiceId/submissions',
+  // nếu không Nest sẽ khớp ':practiceId' = 'activity-calendar' trước.
+  @Get('activity-calendar')
+  getActivityCalendar(@Req() req: Request, @Query('days') days?: string) {
+    const parsedDays = days ? Number.parseInt(days, 10) : undefined;
+    const rangeDays =
+      parsedDays && Number.isFinite(parsedDays) && parsedDays > 0
+        ? Math.min(parsedDays, 366)
+        : undefined;
+    return this.exercisesService.getActivityCalendar(
+      getUserIdFromReq(req),
+      rangeDays,
+    );
   }
 
   @Get(':practiceId/submissions')

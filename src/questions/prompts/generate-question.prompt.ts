@@ -6,43 +6,6 @@ export function buildGenerateQuestionPrompt(
   const { field, difficulty, questionType, count } = input;
 
   const typeInstructions: Record<string, string> = {
-    output_prediction: `
-Create "What is the output?" questions.
-- Provide a short code snippet (5-15 lines) that produces a SPECIFIC, DETERMINISTIC output.
-- Do NOT use Math.random(), Date.now(), or anything non-deterministic.
-- correctAnswer must be the EXACT raw output value, NOT wrapped in quotes or console.log().
-- If output is undefined, correctAnswer is: undefined
-- If output is a string "hello", correctAnswer is: hello
-- If output is a number 42, correctAnswer is: 42
-- If output is an array [1,2,3], correctAnswer is: 1,2,3
-- If output is NaN, correctAnswer is: NaN
-- Keep correctAnswer SHORT (under 30 characters).
-
-EXAMPLE:
-{
-  "title": "Array destructuring default",
-  "content": "What is the output?\\n\\nconst [a = 5, b = 7] = [1];\\nconsole.log(a + b);",
-  "correctAnswer": "8",
-  "explanation": "a is 1 (from array), b is 7 (default value). 1 + 7 = 8.",
-  "category": "Destructuring"
-}`,
-
-    fill_blank: `
-Create "Fill in the blank" questions.
-- Provide a code snippet with exactly ONE blank marked as _____.
-- The blank has ONLY ONE valid answer.
-- correctAnswer must be the EXACT keyword, method name, or value that fills the blank.
-- Keep correctAnswer to 1-2 words maximum.
-
-EXAMPLE:
-{
-  "title": "Array iteration method",
-  "content": "Fill in the blank:\\n\\nconst doubled = [1,2,3]._____(x => x * 2);\\nconsole.log(doubled); // [2,4,6]",
-  "correctAnswer": "map",
-  "explanation": "Array.map() creates a new array by applying the callback to each element.",
-  "category": "Array Methods"
-}`,
-
     coding_challenge: `
 Create coding challenge questions where the player writes a complete function.
 - Describe the problem clearly with input/output specification.
@@ -67,6 +30,7 @@ CRITICAL — testCases input format:
   e.g. return "hello" → expectedOutput: "hello"
   e.g. return 42 → expectedOutput: "42"
   e.g. return [1,2] → expectedOutput: "1,2"
+- Each test case MUST include an "explanation" field that briefly explains why the expected output is correct.
 
 EXAMPLE (single parameter):
 {
@@ -77,10 +41,10 @@ EXAMPLE (single parameter):
   "category": "Array Methods",
   "starterCode": "function sumEven(arr) {\\n  // your code here\\n}",
   "testCases": [
-    { "input": "[1,2,3,4]", "expectedOutput": "6" },
-    { "input": "[1,3,5]", "expectedOutput": "0" },
-    { "input": "[]", "expectedOutput": "0" }
-  ]
+      { "input": "[1,2,3,4]", "expectedOutput": "6", "explanation": "Even numbers are 2 and 4. 2 + 4 = 6." },
+      { "input": "[1,3,5]", "expectedOutput": "0", "explanation": "No even numbers in array, sum is 0." },
+      { "input": "[]", "expectedOutput": "0", "explanation": "Empty array, sum is 0." }
+    ]
 }
 
 EXAMPLE (multiple parameters):
@@ -92,10 +56,10 @@ EXAMPLE (multiple parameters):
   "category": "String Methods",
   "starterCode": "function repeatStr(str, n) {\\n  // your code here\\n}",
   "testCases": [
-    { "input": "[\\"ha\\", 3]", "expectedOutput": "hahaha" },
-    { "input": "[\\"abc\\", 2]", "expectedOutput": "abcabc" },
-    { "input": "[\\"x\\", 0]", "expectedOutput": "" }
-  ]
+      { "input": "[\\"ha\\", 3]", "expectedOutput": "hahaha", "explanation": "'ha' repeated 3 times is 'hahaha'." },
+      { "input": "[\\"abc\\", 2]", "expectedOutput": "abcabc", "explanation": "'abc' repeated 2 times is 'abcabc'." },
+      { "input": "[\\"x\\", 0]", "expectedOutput": "", "explanation": "Repeating 0 times returns empty string." }
+    ]
 }`,
   };
 
@@ -104,7 +68,7 @@ Players type their answer manually, so correctAnswer MUST be short and exact.
 
 Generate exactly ${count} ${difficulty} questions about ${field} programming.
 
-${typeInstructions[questionType] ?? typeInstructions.output_prediction}
+${typeInstructions[questionType]}
 
 STRICT RULES:
 1. Each question must be independent.
@@ -123,8 +87,8 @@ Respond with ONLY a valid JSON array. No markdown fences, no explanation outside
     "correctAnswer": "exact short answer or solution code",
     "explanation": "Why this is the answer",
     "category": "Specific Topic",
-    "starterCode": "(coding_challenge only) function signature",
-    "testCases": "(coding_challenge only) [{ input, expectedOutput }]"
+    "starterCode": "function signature",
+    "testCases": "[{ input, expectedOutput }]"
   }
 ]`;
 }

@@ -15,9 +15,8 @@ export class GenerateQuestionDto {
   difficulty!: string;
 
   @IsNotEmpty()
-  @IsEnum(['output_prediction', 'fill_blank', 'coding_challenge'], {
-    message:
-      'questionType must be output_prediction, fill_blank, or coding_challenge',
+  @IsEnum(['coding_challenge'], {
+    message: 'questionType must be coding_challenge',
   })
   questionType!: string;
 

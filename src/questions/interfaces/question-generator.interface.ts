@@ -5,13 +5,13 @@ export interface GeneratedQuestion {
   explanation: string; // Giải thích
   category: string; // React, JavaScript, Node.js...
   starterCode?: string;
-  testCases?: { input: string; expectedOutput: string }[];
+  testCases?: { input: string; expectedOutput: string; explanation?: string }[];
 }
 
 export interface GenerateQuestionInput {
   field: string; // frontend, backend
   difficulty: string; // easy, medium, hard
-  questionType: string; // output_prediction, fill_blank
+  questionType: string; // coding_challenge
   count: number; // số câu cần generate
 }
 

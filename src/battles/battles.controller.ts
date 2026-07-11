@@ -11,7 +11,8 @@ import {
 import type { Request } from 'express';
 import { Types } from 'mongoose';
 
-import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
+// import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
+import { JwtAuthGuard } from '../common/guard/jwt-auth.guard';
 import { BattlesService } from './battles.service';
 
 import { CreateBattleDto } from './dto/create-battle.dto';
@@ -26,6 +27,23 @@ type JwtUser = {
 } | null;
 
 /** Lấy user từ JWT nếu có, fallback demo user để chạy local không cần đăng nhập. */
+// function getUserFromReq(req: Request): {
+//   userId: string;
+//   username: string;
+//   avatar?: string;
+// } {
+//   const jwtUser = (req as unknown as { user?: JwtUser }).user;
+//   const raw = jwtUser?.userId;
+//   if (raw && Types.ObjectId.isValid(raw)) {
+//     return {
+//       userId: String(raw),
+//       username: jwtUser?.username ?? 'player',
+//       avatar: jwtUser?.avatar,
+//     };
+//   }
+//   // Demo user dùng chung với history/exercises/learning-path để draft battle hiện đúng ở tab Unfinished.
+//   return { userId: '64b000000000000000000001', username: 'demo-user' };
+// }
 function getUserFromReq(req: Request): {
   userId: string;
   username: string;
@@ -40,12 +58,11 @@ function getUserFromReq(req: Request): {
       avatar: jwtUser?.avatar,
     };
   }
-  // Demo user dùng chung với history/exercises/learning-path để draft battle hiện đúng ở tab Unfinished.
-  return { userId: '64b000000000000000000001', username: 'demo-user' };
+  throw new Error('Unauthorized: missing valid userId from JWT');
 }
 
 @Controller('battles')
-@UseGuards(OptionalJwtAuthGuard)
+@UseGuards(JwtAuthGuard)
 export class BattlesController {
   constructor(private readonly battlesService: BattlesService) {}
 

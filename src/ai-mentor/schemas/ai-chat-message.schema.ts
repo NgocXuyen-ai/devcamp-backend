@@ -32,6 +32,7 @@ export class AiChatMessage {
   /** User feedback on this message */
   @Prop({ type: Number, default: 0 })
   feedbackScore!: number; // -1 (thumb down) / 0 / 1 (thumb up)
+  createdAt?: Date;
 }
 
 export const AiChatMessageSchema = SchemaFactory.createForClass(AiChatMessage);

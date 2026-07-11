@@ -16,7 +16,10 @@ import {
 } from '../users/schemas/user-ranking.schema';
 
 import { MatchmakingService } from './matchmaking/matchmaking.service';
-import { MockQuestionsService } from './matchmaking/mock-questions.service';
+import { CodeExecutionModule } from '../code-execution/code-execution.module';
+// import { MockQuestionsService } from './matchmaking/mock-questions.service';
+
+import { QuestionsModule } from '../questions/questions.module';
 
 @Module({
   imports: [
@@ -25,13 +28,16 @@ import { MockQuestionsService } from './matchmaking/mock-questions.service';
       { name: BattleSubmission.name, schema: BattleSubmissionSchema },
       { name: UserRanking.name, schema: UserRankingSchema },
     ]),
+    QuestionsModule,
+    CodeExecutionModule,
   ],
   controllers: [BattlesController],
   providers: [
     BattlesService,
     BattlesGateway,
     MatchmakingService,
-    MockQuestionsService,
+    CodeExecutionModule,
+    // MockQuestionsService,
   ],
   exports: [BattlesService],
 })

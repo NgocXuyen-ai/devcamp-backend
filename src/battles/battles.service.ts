@@ -22,7 +22,7 @@ import { CreateBattleDto } from './dto/create-battle.dto';
 import { GetHistoryDto } from './dto/get-history.dto';
 import { GetLeaderboardDto } from './dto/get-leaderboard.dto';
 
-import { BattleStatus, SubmissionStatus } from '../common/enums';
+import { BattleStatus, CareerField, SubmissionStatus } from '../common/enums';
 
 import { MatchmakingService } from './matchmaking/matchmaking.service';
 import { MockQuestionsService } from './matchmaking/mock-questions.service';
@@ -61,7 +61,7 @@ export class BattlesService {
     private readonly matchmakingService: MatchmakingService,
     private readonly questionsService: MockQuestionsService,
     private readonly gateway: BattlesGateway,
-  ) {}
+  ) { }
 
   async createBattle(
     user: { userId: string; username: string; avatar?: string },
@@ -144,6 +144,45 @@ export class BattlesService {
       },
     };
   }
+  async getGlobalLeaderboard(limit = 50): Promise<LeaderboardRow[]> {
+    const fields = Object.values(CareerField);
+    const allRows: LeaderboardRow[] = [];
+
+    for (const field of fields) {
+      const rankings = await this.rankingModel
+        .find({ field })
+        .sort({ ratingPoints: -1, winRate: -1 })
+        .limit(limit)
+        .populate({ path: 'userId', select: 'username' })
+        .lean();
+
+      for (let i = 0; i < rankings.length; i++) {
+        const r = rankings[i];
+        const populated = r.userId as unknown as {
+          _id?: Types.ObjectId;
+          username?: string;
+        } | null;
+        allRows.push({
+          rank: 0,
+          userId: populated?._id ? String(populated._id) : String(r.userId),
+          username: populated?.username ?? 'Unknown',
+          field: r.field,
+          ratingPoints: r.ratingPoints,
+          totalBattles: r.totalBattles,
+          wins: r.wins,
+          losses: r.losses,
+          draws: r.draws,
+          winRate: r.winRate,
+          tier: r.tier,
+        });
+      }
+    }
+
+    // Sort globally by rating, then assign global ranks
+    allRows.sort((a, b) => b.ratingPoints - a.ratingPoints || b.winRate - a.winRate);
+    return allRows.slice(0, limit).map((row, i) => ({ ...row, rank: i + 1 }));
+  }
+
   async getLeaderboard(dto: GetLeaderboardDto): Promise<LeaderboardRow[]> {
     const limit = dto.limit ?? 20;
 
@@ -366,7 +405,7 @@ export class BattlesService {
 
       if (timeRemaining <= 0) {
         this.stopBattleTimer(battleId);
-        this.endBattle(battleId).catch(() => {});
+        this.endBattle(battleId).catch(() => { });
       }
     }, 1000);
     this.battleTimers.set(battleId, interval);

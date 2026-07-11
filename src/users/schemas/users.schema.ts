@@ -56,6 +56,13 @@ export class UserGamification {
 
   @Prop({ type: [String], default: [] })
   badges!: string[];
+
+  // === Shop item effects ===
+  @Prop({ type: Date })
+  xpBoostExpiresAt?: Date; // XP x2 còn active nếu > now
+
+  @Prop({ type: Number, default: 0 })
+  bonusSubmitAttempts!: number; // Lượt submit thêm từ shop
 }
 
 @Schema({ timestamps: true })

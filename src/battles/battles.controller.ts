@@ -59,6 +59,11 @@ export class BattlesController {
     return this.battlesService.getUserHistory(getUserFromReq(req).userId, dto);
   }
 
+  @Get('leaderboard-global')
+  leaderboardGlobal(@Query('limit') limit?: string) {
+    return this.battlesService.getGlobalLeaderboard(limit ? Number(limit) : 50);
+  }
+
   @Get('leaderboard')
   leaderboard(@Query() dto: GetLeaderboardDto) {
     return this.battlesService.getLeaderboard(dto);

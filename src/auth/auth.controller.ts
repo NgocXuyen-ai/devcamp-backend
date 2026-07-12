@@ -18,6 +18,7 @@ import { JwtAuthGuard } from '../common/guard/jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
 import {
   ForgotPasswordDto,
+  GoogleAuthDto,
   LoginDto,
   RefreshTokenDto,
   ResetPasswordDto,
@@ -45,7 +46,7 @@ function toSafeUser(user: { toObject: () => Record<string, unknown> }) {
 @Controller('auth')
 @UseGuards(JwtAuthGuard)
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Public()
   @Post('register')
@@ -65,6 +66,20 @@ export class AuthController {
     );
     return {
       message: 'Login successful',
+      user: toSafeUser(user),
+      ...tokens,
+    };
+  }
+
+  @Public()
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  async googleLogin(@Body() dto: GoogleAuthDto) {
+    const { user, tokens } = await this.authService.loginWithGoogleAccessToken(
+      dto.accessToken,
+    );
+    return {
+      message: 'Google login successful',
       user: toSafeUser(user),
       ...tokens,
     };

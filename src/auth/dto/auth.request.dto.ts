@@ -67,3 +67,10 @@ export class RefreshTokenDto {
   @IsString()
   refreshToken!: string;
 }
+
+export class GoogleAuthDto {
+  /** access_token trả về từ Google Identity Services (useGoogleLogin ở FE). */
+  @ApiProperty({ description: 'Google OAuth access_token lấy từ FE' })
+  @IsString()
+  accessToken!: string;
+}

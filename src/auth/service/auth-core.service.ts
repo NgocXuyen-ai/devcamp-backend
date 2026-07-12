@@ -62,7 +62,7 @@ export class AuthService {
     private readonly config: ConfigService,
     @InjectModel(RefreshToken.name)
     private readonly refreshTokenModel: Model<RefreshTokenDocument>,
-  ) {}
+  ) { }
 
   // ===== Registration =====
 
@@ -151,7 +151,7 @@ export class AuthService {
       if (await this.attempts.shouldLockAccount(email)) {
         const until = new Date(
           Date.now() +
-            this.config.get<number>('auth.login.lockMinutes', 15) * 60_000,
+          this.config.get<number>('auth.login.lockMinutes', 15) * 60_000,
         );
         await this.users.lockAccount(user._id, until);
         this.mail.sendSuspiciousLoginEmail(user.email).catch(() => undefined);
@@ -177,6 +177,69 @@ export class AuthService {
 
     const tokens = await this.issueTokenPair(user, context);
     return { user, tokens };
+  }
+
+  /**
+   * Nhận Google OAuth access_token do FE lấy được từ useGoogleLogin,
+   * gọi Google UserInfo endpoint để verify token này thật sự hợp lệ
+   * và lấy profile (sub, email, name, picture), sau đó login/tạo user
+   * qua loginOrCreateFromOAuth() đã có sẵn.
+   *
+   * Lưu ý: đây là access_token (không phải id_token dạng JWT), nên
+   * không thể verify bằng thư viện JWT/google-auth-library thông thường -
+   * phải gọi thẳng endpoint userinfo của Google để xác thực.
+   */
+  async loginWithGoogleAccessToken(
+    googleAccessToken: string,
+  ): Promise<{ user: UserDocument; tokens: TokenPair; isNewUser: boolean }> {
+    let profile: {
+      sub?: string;
+      email?: string;
+      email_verified?: boolean;
+      name?: string;
+      picture?: string;
+    };
+
+    try {
+      const res = await fetch(
+        'https://www.googleapis.com/oauth2/v3/userinfo',
+        { headers: { Authorization: `Bearer ${googleAccessToken}` } },
+      );
+      if (!res.ok) {
+        throw new Error(`Google responded ${res.status}`);
+      }
+      profile = await res.json();
+    } catch {
+      // Token sai, hết hạn, hoặc bị revoke -> Google trả 401/400 ở bước fetch.
+      throw new UnauthorizedException({
+        message: 'Invalid or expired Google access token',
+        code: 'INVALID_GOOGLE_TOKEN',
+      });
+    }
+
+    if (!profile.sub || !profile.email) {
+      throw new UnauthorizedException({
+        message: 'Google account is missing required profile fields',
+        code: 'INVALID_GOOGLE_TOKEN',
+      });
+    }
+
+    // Chặn trường hợp email Google chưa được verify (hiếm nhưng vẫn có thể
+    // xảy ra) để tránh ai đó dùng email chưa xác thực chiếm tài khoản trùng.
+    if (profile.email_verified === false) {
+      throw new UnauthorizedException({
+        message: 'Google email is not verified',
+        code: 'GOOGLE_EMAIL_NOT_VERIFIED',
+      });
+    }
+
+    return this.loginOrCreateFromOAuth({
+      provider: LoginProvider.GOOGLE,
+      providerId: profile.sub,
+      email: profile.email.toLowerCase(),
+      username: profile.name ?? profile.email.split('@')[0],
+      avatarUrl: profile.picture,
+    });
   }
 
   async loginOrCreateFromOAuth(params: {

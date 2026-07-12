@@ -194,6 +194,17 @@ export class UsersService {
     return { items, total };
   }
 
+  async findInactiveLearners(threshold: Date): Promise<{ userId: Types.ObjectId; lastActiveDate: Date | null | undefined }[]> {
+    const users = await this.userModel.find({
+      'gamification.lastActiveDate': { $lte: threshold }
+    }).select('_id gamification.lastActiveDate').exec();
+    
+    return users.map(u => ({
+      userId: u._id as Types.ObjectId,
+      lastActiveDate: u.gamification?.lastActiveDate
+    }));
+  }
+
   // ----- admin operations -----
 
   async setRole(userId: Types.ObjectId, role: UserRole): Promise<UserDocument> {

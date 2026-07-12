@@ -16,6 +16,8 @@ import {
   LessonLevel,
   NodeStatus,
 } from '../common/enums';
+import { NotificationsService } from '../notifications/notifications.service';
+import { RecallService } from '../recall/recall.service';
 
 const ROADMAP_STAGE_SIZE = 10;
 type RoadmapWithId = Roadmap & { _id: Types.ObjectId };
@@ -34,7 +36,10 @@ export class LearningPathService {
 
     @InjectModel(LearningHistory.name)
     private readonly historyModel: Model<LearningHistory>,
-  ) {}
+
+    private readonly notifications: NotificationsService,
+    private readonly recall: RecallService,
+  ) { }
 
   // =========================
   // ROADMAP
@@ -112,6 +117,14 @@ export class LearningPathService {
     const now = new Date();
     const isCompleted = dto.status === NodeStatus.COMPLETED;
 
+    // Lấy trạng thái cũ trước khi update, để chỉ báo LESSON_UNLOCK đúng
+    // lần đầu chuyển sang completed — tránh spam nếu user nộp lại bài
+    // của 1 node đã xong từ trước.
+    const previous = await this.progressModel
+      .findOne({ userId, nodeId: new Types.ObjectId(nodeId) })
+      .lean();
+    const wasCompleted = previous?.status === NodeStatus.COMPLETED;
+
     const progress = await this.progressModel.findOneAndUpdate(
       {
         userId,
@@ -145,6 +158,22 @@ export class LearningPathService {
       });
     } catch {
       // Activity feed là phụ — lỗi ghi history không được làm hỏng việc lưu progress.
+    }
+
+    // Báo "bài học mới mở khóa" + khởi tạo lịch ôn tập SM-2, đúng lần đầu
+    // hoàn thành node này.
+    if (isCompleted && !wasCompleted) {
+      this.notifications
+        .notifyLessonUnlock({
+          userId: userId.toString(),
+          nodeId,
+          nodeTitle: node.title,
+        })
+        .catch(() => undefined);
+
+      this.recall
+        .scheduleInitialReview(userId, new Types.ObjectId(nodeId))
+        .catch(() => undefined);
     }
 
     return progress;

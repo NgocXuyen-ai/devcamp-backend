@@ -7,7 +7,8 @@ import {
 
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-
+import { BattlesGateway } from './battles.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Battle, BattleDocument } from './schemas/battle.schema';
 import {
   UserRanking,
@@ -28,7 +29,6 @@ import { MatchmakingService } from './matchmaking/matchmaking.service';
 import { MockQuestionsService } from './matchmaking/mock-questions.service';
 import { SubmitAnswerDto } from './dto/submit-answer.dto';
 
-import { BattlesGateway } from './battles.gateway';
 import {
   buildArenaOverview,
   type ArenaOverviewResponse,
@@ -61,6 +61,7 @@ export class BattlesService {
     private readonly matchmakingService: MatchmakingService,
     private readonly questionsService: MockQuestionsService,
     private readonly gateway: BattlesGateway,
+    private readonly notifications: NotificationsService,
   ) { }
 
   async createBattle(
@@ -378,11 +379,13 @@ export class BattlesService {
       isDraw,
       finalScores,
     });
+    this.notifyPlayersOfResult(battleId, finalScores, winner?.userId.toString());
     return endResult;
   }
+
   async getSubmissions(battleId: string, userId?: string) {
     if (!Types.ObjectId.isValid(battleId)) {
-      throw new NotFoundException('Battle not foun');
+      throw new NotFoundException('Battle not found');
     }
     const filter: Record<string, unknown> = {
       battleId: new Types.ObjectId(battleId),
@@ -410,6 +413,7 @@ export class BattlesService {
     }, 1000);
     this.battleTimers.set(battleId, interval);
   }
+
   stopBattleTimer(battleId: string) {
     const interval = this.battleTimers.get(battleId);
     if (interval) {
@@ -417,6 +421,7 @@ export class BattlesService {
       this.battleTimers.delete(battleId);
     }
   }
+
   async abandonBattle(battleId: string, userId: string) {
     if (!Types.ObjectId.isValid(battleId))
       throw new NotFoundException('Battle not found');
@@ -455,6 +460,25 @@ export class BattlesService {
       isDraw: false,
       finalScores,
     });
+    // Chỉ báo cho đối thủ còn lại ("đối thủ đã bỏ cuộc, bạn thắng") —
+    // người tự bỏ cuộc vừa chủ động thoát nên không cần nhắc lại trong app.
+    if (opponent) {
+      const opponentScore =
+        finalScores.find((s) => s.userId === opponent.userId.toString())
+          ?.score ?? 0;
+      const abandonerScore =
+        finalScores.find((s) => s.userId === userId)?.score ?? 0;
+      this.notifications
+        .notifyBattleResult({
+          userId: opponent.userId.toString(),
+          battleId,
+          won: true,
+          isDraw: false,
+          myScore: opponentScore,
+          opponentScore: abandonerScore,
+        })
+        .catch(() => undefined);
+    }
     return {
       message: 'Battle abandoned',
       winnerId: opponent?.userId.toString(),
@@ -492,6 +516,31 @@ export class BattlesService {
       });
     });
     await Promise.all(updates);
+  }
+
+  private notifyPlayersOfResult(
+    battleId: string,
+    finalScores: { userId: string; score: number }[],
+    winnerId?: string,
+  ) {
+    for (const player of finalScores) {
+      const opponentScoreEntry = finalScores.find(
+        (s) => s.userId !== player.userId,
+      );
+      const won = winnerId ? winnerId === player.userId : false;
+      const isDraw = !winnerId;
+
+      this.notifications
+        .notifyBattleResult({
+          userId: player.userId,
+          battleId,
+          won,
+          isDraw,
+          myScore: player.score,
+          opponentScore: opponentScoreEntry?.score ?? 0,
+        })
+        .catch(() => undefined);
+    }
   }
 
   private async buildBattleView(

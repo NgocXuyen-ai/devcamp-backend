@@ -18,6 +18,7 @@ import {
 import { UserDocument } from '../../users/schemas/users.schema';
 import { UsersService } from '../../users/service/users.service';
 import { LoginAttemptService } from '../../users/service/login-attempt.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 import { RegisterDto } from '../dto/register.dto';
 import {
   ForgotPasswordDto,
@@ -58,6 +59,7 @@ export class AuthService {
     private readonly otpService: OtpService,
     private readonly passwords: PasswordService,
     private readonly mail: MailService,
+    private readonly notifications: NotificationsService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     @InjectModel(RefreshToken.name)

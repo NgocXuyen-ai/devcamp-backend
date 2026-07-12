@@ -17,6 +17,7 @@ import {
 
 import { MatchmakingService } from './matchmaking/matchmaking.service';
 import { MockQuestionsService } from './matchmaking/mock-questions.service';
+import { NotificationsModule } from '../notifications/notification.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { MockQuestionsService } from './matchmaking/mock-questions.service';
       { name: BattleSubmission.name, schema: BattleSubmissionSchema },
       { name: UserRanking.name, schema: UserRankingSchema },
     ]),
+    NotificationsModule,
   ],
   controllers: [BattlesController],
   providers: [
@@ -35,4 +37,4 @@ import { MockQuestionsService } from './matchmaking/mock-questions.service';
   ],
   exports: [BattlesService],
 })
-export class BattlesModule {}
+export class BattlesModule { }

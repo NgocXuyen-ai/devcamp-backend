@@ -376,7 +376,7 @@ export class BattlesService implements OnModuleInit {
       dto.answer,
       functionName,
       testCasesData,
-      'javascript',
+      dto.language || 'javascript',
     );
 
     isCorrect = judgeResult.isCorrect;
@@ -393,7 +393,7 @@ export class BattlesService implements OnModuleInit {
         battleId: new Types.ObjectId(battleId),
         userId: new Types.ObjectId(userId),
         questionId: new Types.ObjectId(dto.questionId),
-        language: 'text',
+        language: dto.language || 'javascript',
         code: dto.answer,
         status: isCorrect
           ? SubmissionStatus.ACCEPTED

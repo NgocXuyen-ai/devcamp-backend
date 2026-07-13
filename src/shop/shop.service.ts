@@ -22,6 +22,7 @@ import {
   ShopCouponRedemption,
   ShopCouponRedemptionDocument,
 } from './schemas/shop-coupon-redemption.schema';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -45,7 +46,8 @@ export class ShopService implements OnModuleInit {
     private readonly couponModel: Model<ShopCouponDocument>,
     @InjectModel(ShopCouponRedemption.name)
     private readonly redemptionModel: Model<ShopCouponRedemptionDocument>,
-  ) {}
+    private readonly notifications: NotificationsService,
+  ) { }
 
   async onModuleInit() {
     await this.ensureSeedData();
@@ -194,7 +196,8 @@ export class ShopService implements OnModuleInit {
       canClaimDailyReward,
       lastDailyClaimAt: lastClaim ?? null,
       // Active effects từ shop items
-      xpBoostExpiresAt: user.gamification?.xpBoostExpiresAt?.toISOString() ?? null,
+      xpBoostExpiresAt:
+        user.gamification?.xpBoostExpiresAt?.toISOString() ?? null,
       bonusSubmitAttempts: user.gamification?.bonusSubmitAttempts ?? 0,
       badges: user.gamification?.badges ?? [],
       inventory: inventory.map((row) => ({
@@ -329,6 +332,17 @@ export class ShopService implements OnModuleInit {
     }));
     await this.inventoryModel.bulkWrite(bulk);
 
+    // Best-effort — lỗi emit notification không được làm hỏng giao dịch
+    // đã thực hiện xong (coin đã trừ, inventory đã cập nhật).
+    this.notifications
+      .notifyShopPurchase({
+        userId: userId.toString(),
+        purchaseId: String(createdPurchase._id),
+        itemNames: purchaseLines.map((line) => line.name),
+        totalCoins,
+      })
+      .catch(() => undefined);
+
     return {
       coins: user.gamification.coins,
       purchaseId: String(createdPurchase._id),
@@ -349,10 +363,7 @@ export class ShopService implements OnModuleInit {
     await inv.save();
 
     // Lấy thông tin item để áp dụng effect
-    const item = await this.itemModel
-      .findById(inv.itemId)
-      .lean()
-      .exec();
+    const item = await this.itemModel.findById(inv.itemId).lean().exec();
 
     const user = await this.userModel.findById(userId).exec();
     if (user) {

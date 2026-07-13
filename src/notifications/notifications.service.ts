@@ -265,7 +265,8 @@ export class NotificationsService {
             userId: params.userId,
             type: NotificationType.ACHIEVEMENT,
             title: `Huy hiệu mới: ${params.badgeName} 🏆`,
-            body: params.description ?? `Bạn vừa mở khóa huy hiệu "${params.badgeName}".`,
+            body:
+                params.description ?? `Bạn vừa mở khóa huy hiệu "${params.badgeName}".`,
             actionUrl: '/profile?tab=badges',
             data: { badgeName: params.badgeName },
             priority: 'normal',
@@ -327,10 +328,7 @@ export class NotificationsService {
         });
     }
 
-    async notifyStreakBroken(params: {
-        userId: string;
-        previousStreak: number;
-    }) {
+    async notifyStreakBroken(params: { userId: string; previousStreak: number }) {
         return this.create({
             userId: params.userId,
             type: NotificationType.STREAK_BROKEN,
@@ -342,10 +340,7 @@ export class NotificationsService {
         });
     }
 
-    async notifySuspiciousLogin(params: {
-        userId: string;
-        ipAddress?: string;
-    }) {
+    async notifySuspiciousLogin(params: { userId: string; ipAddress?: string }) {
         return this.create({
             userId: params.userId,
             type: NotificationType.SUSPICIOUS_LOGIN,
@@ -356,6 +351,52 @@ export class NotificationsService {
             actionUrl: '/settings/security',
             data: { ipAddress: params.ipAddress },
             priority: 'high',
+        });
+    }
+
+    async notifyPracticeSolved(params: {
+        userId: string;
+        practiceId: string;
+        practiceTitle: string;
+        coinsEarned: number;
+    }) {
+        const { userId, practiceId, practiceTitle, coinsEarned } = params;
+        const body =
+            coinsEarned > 0
+                ? `Bạn đã giải đúng "${practiceTitle}" và nhận được ${coinsEarned} coin. Làm tốt lắm!`
+                : `Bạn đã giải đúng "${practiceTitle}".`;
+
+        return this.create({
+            userId,
+            type: NotificationType.PRACTICE_SOLVED,
+            title: 'Giải bài thành công! ✅',
+            body,
+            actionUrl: `/practice/${practiceId}`,
+            data: { practiceId, coinsEarned },
+            priority: 'normal',
+        });
+    }
+
+    async notifyShopPurchase(params: {
+        userId: string;
+        purchaseId: string;
+        itemNames: string[];
+        totalCoins: number;
+    }) {
+        const { userId, purchaseId, itemNames, totalCoins } = params;
+        const itemsLabel =
+            itemNames.length > 1
+                ? `${itemNames[0]} và ${itemNames.length - 1} vật phẩm khác`
+                : itemNames[0];
+
+        return this.create({
+            userId,
+            type: NotificationType.SHOP_PURCHASE,
+            title: 'Mua hàng thành công! 🛍️',
+            body: `Bạn đã mua ${itemsLabel} với giá ${totalCoins} coin.`,
+            actionUrl: '/shop?tab=inventory',
+            data: { purchaseId, itemNames, totalCoins },
+            priority: 'normal',
         });
     }
 

@@ -114,6 +114,8 @@ export enum NotificationType {
   RECALL_DUE = 'recall_due',
   SUSPICIOUS_LOGIN = 'suspicious_login',
   SYSTEM = 'system',
+  PRACTICE_SOLVED = 'practice_solved',
+  SHOP_PURCHASE = 'shop_purchase',
 }
 
 export enum PenaltyType {

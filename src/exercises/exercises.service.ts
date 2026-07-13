@@ -21,6 +21,7 @@ import type {
   JudgeRunResult,
   SubmissionStatusLabel,
 } from './judge.types';
+import { NotificationsService } from '../notifications/notifications.service';
 
 type JudgeTemplate = {
   id: string;
@@ -100,6 +101,7 @@ export class ExercisesService {
     private readonly userModel: Model<UserDocument>,
     @InjectModel(RoadmapNode.name)
     private readonly roadmapNodeModel: Model<RoadmapNodeDocument>,
+    private readonly notifications: NotificationsService,
   ) { }
 
   async run(dto: PracticeEvaluationDto): Promise<JudgeRunResult> {
@@ -163,6 +165,20 @@ export class ExercisesService {
         dto.practiceId,
         normalizedDifficulty,
       );
+
+      // coinsEarned > 0 chỉ đúng ở lần Accepted ĐẦU TIÊN cho bài này (xem
+      // awardCoinsForAccepted) — dùng luôn điều kiện này để tránh spam
+      // notification khi user submit lại bài đã Accepted từ trước.
+      if (coinsEarned > 0) {
+        this.notifications
+          .notifyPracticeSolved({
+            userId: userId.toString(),
+            practiceId: dto.practiceId,
+            practiceTitle: dto.title,
+            coinsEarned,
+          })
+          .catch(() => undefined);
+      }
     }
 
     const submission = this.toSubmissionRecord(created);

@@ -7,12 +7,14 @@ import { Bookmark } from './schemas/bookmark.schema';
 import { UserProgress } from '../learning-path/schemas/user-progress.schema';
 import { RoadmapNode } from '../learning-path/schemas/roadmap-node.schema';
 import { Battle } from '../battles/schemas/battle.schema';
+import { Submission } from '../exercises/schemas/submission.schema';
 import {
   BattleMode,
   BattleStatus,
   HistoryAction,
   NodeStatus,
   NodeType,
+  SubmissionStatus,
 } from '../common/enums';
 
 export type FinishedLesson = {
@@ -105,6 +107,11 @@ type LeanBattle = Battle & { _id: Types.ObjectId; createdAt?: Date };
 
 type LeanHistory = LearningHistory & { _id: Types.ObjectId; createdAt?: Date };
 
+type LeanSubmission = Submission & { _id: Types.ObjectId; createdAt?: Date };
+
+// FinishedLesson kèm mốc thời gian thô để merge/sort chung giữa lesson (node) và practice.
+type SortableFinished = FinishedLesson & { sortAt: number };
+
 @Injectable()
 export class HistoryService {
   constructor(
@@ -119,24 +126,73 @@ export class HistoryService {
 
     @InjectModel(Battle.name)
     private readonly battleModel: Model<Battle>,
+
+    @InjectModel(Submission.name)
+    private readonly submissionModel: Model<Submission>,
   ) {}
 
   async getFinished(userId: Types.ObjectId): Promise<FinishedLesson[]> {
-    const rows = await this.progressModel
-      .find({ userId, status: NodeStatus.COMPLETED })
-      .sort({ completedAt: -1, updatedAt: -1 })
-      .limit(50)
-      .populate('nodeId')
-      .lean<PopulatedProgress[]>();
+    // "Finished" = các node đã COMPLETED (learning-path) + các bài practice đã pass
+    // (Submission ACCEPTED). Practice không phải RoadmapNode nên không nằm trong
+    // UserProgress — phải đọc thẳng từ Submission, nếu không tab Finished sẽ trống
+    // dù user đã giải xong practice.
+    const [rows, submissions] = await Promise.all([
+      this.progressModel
+        .find({ userId, status: NodeStatus.COMPLETED })
+        .sort({ completedAt: -1, updatedAt: -1 })
+        .limit(50)
+        .populate('nodeId')
+        .lean<PopulatedProgress[]>(),
+      this.submissionModel
+        .find({ userId, status: SubmissionStatus.ACCEPTED })
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(200)
+        .lean<LeanSubmission[]>(),
+    ]);
 
-    return rows.map((row) => ({
-      id: String(row._id),
-      title: row.nodeId?.title ?? 'Untitled Lesson',
-      status: 'MASTERED',
-      completedAt: this.formatDate(row.completedAt ?? row.updatedAt),
-      score: Math.round(row.score ?? 0),
-      icon: this.nodeIcon(row.nodeId?.type),
-    }));
+    const nodeLessons: SortableFinished[] = rows.map((row) => {
+      const at = row.completedAt ?? row.updatedAt;
+      return {
+        id: String(row._id),
+        title: row.nodeId?.title ?? 'Untitled Lesson',
+        status: 'MASTERED',
+        completedAt: this.formatDate(at),
+        score: Math.round(row.score ?? 0),
+        icon: this.nodeIcon(row.nodeId?.type),
+        sortAt: at ? new Date(at).getTime() : 0,
+      };
+    });
+
+    // Một practice có thể được submit ACCEPTED nhiều lần → chỉ giữ lần gần nhất.
+    const seenPractice = new Set<string>();
+    const practiceLessons: SortableFinished[] = [];
+    for (const sub of submissions) {
+      if (seenPractice.has(sub.practiceId)) continue;
+      seenPractice.add(sub.practiceId);
+      practiceLessons.push({
+        id: String(sub._id),
+        title: sub.title,
+        status: 'MASTERED',
+        completedAt: this.formatDate(sub.createdAt),
+        score: Math.round(sub.score ?? 0),
+        icon: this.trackIcon(sub.track),
+        sortAt: sub.createdAt ? new Date(sub.createdAt).getTime() : 0,
+      });
+    }
+
+    return [...nodeLessons, ...practiceLessons]
+      .sort((a, b) => b.sortAt - a.sortAt)
+      .slice(0, 50)
+      .map(
+        (row): FinishedLesson => ({
+          id: row.id,
+          title: row.title,
+          status: row.status,
+          completedAt: row.completedAt,
+          score: row.score,
+          icon: row.icon,
+        }),
+      );
   }
 
   async getUnfinished(userId: Types.ObjectId): Promise<UnfinishedResponse> {
@@ -346,6 +402,13 @@ export class HistoryService {
       default:
         return '📘';
     }
+  }
+
+  private trackIcon(track?: string): string {
+    const value = (track ?? '').toLowerCase();
+    if (value.includes('back')) return '⚙️';
+    if (value.includes('front')) return '🎨';
+    return '💻';
   }
 
   private battleTitle(battle: LeanBattle): string {

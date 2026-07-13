@@ -1,0 +1,54 @@
+services:
+  judge0:
+    image: judge0/judge0:latest
+    privileged: true
+    ports:
+      # DEV: expose để test bằng Postman/curl
+      # PRODUCTION: xóa block ports này, chỉ giữ internal network
+      - "2358:2358"
+    environment:
+      # Auth — mọi request phải kèm header X-Auth-Token
+      - AUTHN_TOKEN=${JUDGE0_AUTHN_TOKEN}
+      # Database
+      - REDIS_HOST=judge0-redis
+      - POSTGRES_HOST=judge0-postgres
+      - POSTGRES_DB=judge0
+      - POSTGRES_USER=judge0
+      - POSTGRES_PASSWORD=${JUDGE0_POSTGRES_PASSWORD}
+      # Resource limits cho mỗi submission
+      - CPU_TIME_LIMIT=5
+      - WALL_TIME_LIMIT=10
+      - MEMORY_LIMIT=128000
+      - MAX_PROCESSES_AND_OR_THREADS=30
+      - ENABLE_NETWORK=false
+    depends_on:
+      - judge0-postgres
+      - judge0-redis
+    restart: unless-stopped
+    networks:
+      - judge0-network
+
+  judge0-postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=judge0
+      - POSTGRES_USER=judge0
+      - POSTGRES_PASSWORD=${JUDGE0_POSTGRES_PASSWORD}
+    volumes:
+      - judge0-postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - judge0-network
+
+  judge0-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - judge0-network
+
+volumes:
+  judge0-postgres-data:
+
+networks:
+  judge0-network:
+    driver: bridge

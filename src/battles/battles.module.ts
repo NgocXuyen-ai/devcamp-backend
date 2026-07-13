@@ -16,6 +16,10 @@ import {
 } from '../users/schemas/user-ranking.schema';
 
 import { MatchmakingService } from './matchmaking/matchmaking.service';
+import { CodeExecutionModule } from '../code-execution/code-execution.module';
+// import { MockQuestionsService } from './matchmaking/mock-questions.service';
+
+import { QuestionsModule } from '../questions/questions.module';
 import { MockQuestionsService } from './matchmaking/mock-questions.service';
 import { NotificationsModule } from '../notifications/notification.module';
 
@@ -26,6 +30,8 @@ import { NotificationsModule } from '../notifications/notification.module';
       { name: BattleSubmission.name, schema: BattleSubmissionSchema },
       { name: UserRanking.name, schema: UserRankingSchema },
     ]),
+    QuestionsModule,
+    CodeExecutionModule,
     NotificationsModule,
   ],
   controllers: [BattlesController],
@@ -33,7 +39,8 @@ import { NotificationsModule } from '../notifications/notification.module';
     BattlesService,
     BattlesGateway,
     MatchmakingService,
-    MockQuestionsService,
+    CodeExecutionModule,
+    // MockQuestionsService,
   ],
   exports: [BattlesService],
 })

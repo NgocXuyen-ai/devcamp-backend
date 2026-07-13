@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -6,14 +6,7 @@ import {
   CodeAnalysis,
   CodeAnalysisDocument,
 } from './schemas/code-analysis.schema';
-
-interface AnalysisResult {
-  summary: string;
-  strengths: string[];
-  improvements: string[];
-  refactoringSuggestion: string;
-  resources: AnalysisResource[];
-}
+import { GroqAnalysisProvider } from './providers/groq-analysis.provider';
 
 interface ShapeableAnalysis {
   _id: Types.ObjectId | string;
@@ -33,9 +26,12 @@ interface ShapeableAnalysis {
 
 @Injectable()
 export class CodeAnalysisService {
+  private readonly logger = new Logger(CodeAnalysisService.name);
+
   constructor(
     @InjectModel(CodeAnalysis.name)
     private readonly model: Model<CodeAnalysisDocument>,
+    private readonly groqProvider: GroqAnalysisProvider,
   ) {}
 
   private shape(doc: ShapeableAnalysis) {
@@ -65,7 +61,17 @@ export class CodeAnalysisService {
     if (!Types.ObjectId.isValid(battleId)) {
       throw new NotFoundException('Battle not found');
     }
-    const result = this.analyze(code, language);
+
+    let result;
+    try {
+      this.logger.log('Calling Groq AI for code analysis...');
+      result = await this.groqProvider.analyze(code, language);
+      this.logger.log('Groq AI analysis completed');
+    } catch (err) {
+      this.logger.warn(`Groq failed, using static fallback: ${String(err)}`);
+      result = this.staticAnalyze(code, language);
+    }
+
     const doc = await this.model.findOneAndUpdate(
       { battleId: new Types.ObjectId(battleId), userId },
       {
@@ -92,80 +98,35 @@ export class CodeAnalysisService {
     return this.shape(doc);
   }
 
-  /**
-   * Deterministic, dependency-free static review. Inspects simple code signals
-   * to produce useful feedback. Swap this for a real LLM call when available.
-   */
-  private analyze(code: string, language: string): AnalysisResult {
+  /** Fallback khi Groq API lỗi — giữ app không crash */
+  private staticAnalyze(code: string, language: string) {
     const lines = code.split('\n');
     const loc = lines.filter((l) => l.trim().length > 0).length;
     const strengths: string[] = [];
     const improvements: string[] = [];
 
-    const hasComments = /(^|\s)(\/\/|\/\*|\*|#)/m.test(code);
-    const usesVar = /\bvar\b/.test(code);
-    const usesConstLet = /\b(const|let)\b/.test(code);
-    const hasNestedLoops = /for[\s\S]{0,400}for|while[\s\S]{0,400}while/.test(
-      code,
-    );
-    const longFunctions = loc > 60;
-    const hasTryCatch = /\btry\b[\s\S]*\bcatch\b/.test(code);
-    const usesArrow = /=>/.test(code);
-    const hasMagicNumbers = /[^.\w](\d{2,})(?![\w.])/.test(code);
-
-    if (usesConstLet) {
+    if (/\b(const|let)\b/.test(code))
       strengths.push('Uses block-scoped declarations (const/let).');
-    }
-    if (usesArrow) strengths.push('Uses modern arrow-function syntax.');
-    if (hasComments) strengths.push('Includes comments explaining intent.');
-    if (hasTryCatch) strengths.push('Handles errors with try/catch.');
+    if (/=>/.test(code)) strengths.push('Uses modern arrow-function syntax.');
     if (loc <= 40) strengths.push('Solution is concise and focused.');
-    if (strengths.length === 0) {
+    if (strengths.length === 0)
       strengths.push('Produces a working solution to the problem.');
-    }
 
-    if (usesVar) {
-      improvements.push(
-        'Replace `var` with `const`/`let` to avoid scope bugs.',
-      );
-    }
-    if (!hasComments) {
+    if (/\bvar\b/.test(code))
+      improvements.push('Replace `var` with `const`/`let`.');
+    if (!/(\/\/|\/\*)/m.test(code))
       improvements.push('Add brief comments for non-obvious logic.');
-    }
-    if (hasNestedLoops) {
-      improvements.push(
-        'Nested loops detected — consider a map/set to lower time complexity.',
-      );
-    }
-    if (longFunctions) {
-      improvements.push(
-        'Function is long — split it into smaller, testable helpers.',
-      );
-    }
-    if (hasMagicNumbers) {
-      improvements.push('Extract magic numbers into named constants.');
-    }
-    if (!hasTryCatch) {
+    if (!/\btry\b/.test(code))
       improvements.push('Consider guarding edge cases / invalid input.');
-    }
 
-    const summary =
-      `Reviewed ~${loc} lines of ${language}. ` +
-      (improvements.length <= 1
-        ? 'Clean solution with only minor polish suggested.'
-        : `Found ${improvements.length} areas to improve and ${strengths.length} strengths.`);
-
-    const refactoringSuggestion = hasNestedLoops
-      ? 'Try trading the nested iteration for a hash-based lookup (object/Map) to bring the hot path closer to O(n).'
-      : usesVar
-        ? 'Modernize the declarations (var → const/let) and group related logic into small pure functions.'
-        : 'Extract repeated logic into helpers and add input-validation guards at the top of the function.';
+    const summary = `Reviewed ~${loc} lines of ${language}. Found ${improvements.length} areas to improve and ${strengths.length} strengths.`;
 
     return {
       summary,
       strengths,
       improvements,
-      refactoringSuggestion,
+      refactoringSuggestion:
+        'Extract repeated logic into helpers and add input-validation guards.',
       resources: this.resourcesFor(language),
     };
   }
@@ -175,13 +136,10 @@ export class CodeAnalysisService {
     if (lang.includes('python')) {
       return [
         {
-          title: 'PEP 8 – Style Guide for Python',
+          title: 'PEP 8 – Style Guide',
           url: 'https://peps.python.org/pep-0008/',
         },
-        {
-          title: 'Big-O Cheat Sheet',
-          url: 'https://www.bigocheatsheet.com/',
-        },
+        { title: 'Big-O Cheat Sheet', url: 'https://www.bigocheatsheet.com/' },
       ];
     }
     return [
@@ -193,10 +151,7 @@ export class CodeAnalysisService {
         title: 'Clean Code JavaScript',
         url: 'https://github.com/ryanmcdermott/clean-code-javascript',
       },
-      {
-        title: 'Big-O Cheat Sheet',
-        url: 'https://www.bigocheatsheet.com/',
-      },
+      { title: 'Big-O Cheat Sheet', url: 'https://www.bigocheatsheet.com/' },
     ];
   }
 }

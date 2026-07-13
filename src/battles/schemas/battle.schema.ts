@@ -82,6 +82,9 @@ export class Battle {
   @Prop({ type: Date })
   endTime?: Date;
 
+  @Prop({ type: Date })
+  expectedEndTime?: Date;
+
   /** Max duration (giây) trước khi tự huỷ */
   @Prop({ type: Number, default: 1800 })
   timeLimitSeconds!: number;

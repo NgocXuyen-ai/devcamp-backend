@@ -1,0 +1,1 @@
+export const AI_MENTOR_PROVIDER = 'AI_MENTOR_PROVIDER';

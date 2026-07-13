@@ -5,6 +5,7 @@ import { LearningHistory } from './schemas/learning-history.schema';
 import { Bookmark } from './schemas/bookmark.schema';
 import { UserProgress } from '../learning-path/schemas/user-progress.schema';
 import { Battle } from '../battles/schemas/battle.schema';
+import { Submission } from '../exercises/schemas/submission.schema';
 import { describe, beforeEach, it, expect } from '@jest/globals';
 
 describe('HistoryService', () => {
@@ -28,6 +29,10 @@ describe('HistoryService', () => {
         },
         {
           provide: getModelToken(Battle.name),
+          useValue: {},
+        },
+        {
+          provide: getModelToken(Submission.name),
           useValue: {},
         },
       ],

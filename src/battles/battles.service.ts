@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  OnModuleInit,
+  Logger,
   BadRequestException,
 } from '@nestjs/common';
 
@@ -26,6 +28,16 @@ import { GetLeaderboardDto } from './dto/get-leaderboard.dto';
 import { BattleStatus, CareerField, SubmissionStatus } from '../common/enums';
 
 import { MatchmakingService } from './matchmaking/matchmaking.service';
+import { Inject } from '@nestjs/common';
+import { IQuestionService } from './interfaces/question.interface';
+import { QUESTION_SERVICE } from '../questions/interfaces/question-service.token';
+
+import { BadRequestException } from '@nestjs/common';
+import { SubmitAnswerDto } from './dto/submit-answer.dto';
+
+import { BattlesGateway } from './battles.gateway';
+import { CodeJudgeService } from '../code-execution/code-judge.service';
+import type { JudgeResult } from '../code-execution/interfaces/judge-result.interface';
 import { MockQuestionsService } from './matchmaking/mock-questions.service';
 import { SubmitAnswerDto } from './dto/submit-answer.dto';
 
@@ -49,9 +61,12 @@ export interface LeaderboardRow {
 }
 
 @Injectable()
-export class BattlesService {
+export class BattlesService implements OnModuleInit {
+  private readonly logger = new Logger(BattlesService.name);
   private readonly battleTimers = new Map<string, NodeJS.Timeout>();
   constructor(
+    @Inject(QUESTION_SERVICE)
+    private readonly questionsService: IQuestionService,
     @InjectModel(Battle.name)
     private readonly battleModel: Model<BattleDocument>,
     @InjectModel(BattleSubmission.name)
@@ -59,11 +74,86 @@ export class BattlesService {
     @InjectModel(UserRanking.name)
     private readonly rankingModel: Model<UserRankingDocument>,
     private readonly matchmakingService: MatchmakingService,
-    private readonly questionsService: MockQuestionsService,
+    // private readonly questionsService: MockQuestionsService,
     private readonly gateway: BattlesGateway,
+    private readonly codeJudgeService: CodeJudgeService,
+  ) {}
     private readonly notifications: NotificationsService,
   ) { }
 
+  async onModuleInit() {
+    this.logger.log('🔄 Cleaning up stuck battles...');
+
+    const now = new Date();
+
+    // Case 1: IN_PROGRESS + đã hết expectedEndTime → kết thúc
+    const expiredBattles = await this.battleModel.find({
+      status: BattleStatus.IN_PROGRESS,
+      expectedEndTime: { $lte: now },
+    });
+
+    for (const battle of expiredBattles) {
+      try {
+        await this.endBattle(String(battle._id));
+        this.logger.log(`✅ Ended expired battle: ${String(battle._id)}`);
+      } catch (error) {
+        this.logger.warn(
+          `⚠️ Failed to end battle ${String(battle._id)}: ${String(error)}`,
+        );
+      }
+    }
+
+    // Case 2: IN_PROGRESS + chưa hết expectedEndTime → khôi phục timer
+    const activeBattles = await this.battleModel.find({
+      status: BattleStatus.IN_PROGRESS,
+      expectedEndTime: { $gt: now },
+    });
+
+    for (const battle of activeBattles) {
+      const remainingMs = battle.expectedEndTime!.getTime() - now.getTime();
+      const remainingSeconds = Math.floor(remainingMs / 1000);
+
+      if (remainingSeconds > 0) {
+        this.startBattleTimer(String(String(battle._id)), remainingSeconds);
+        this.logger.log(
+          `🔁 Restored timer for battle ${String(battle._id)} (${remainingSeconds}s left)`,
+        );
+      } else {
+        try {
+          await this.endBattle(String(String(battle._id)));
+          this.logger.log(`✅ Ended battle (edge case): ${String(battle._id)}`);
+        } catch (error: unknown) {
+          this.logger.warn(
+            `⚠️ Failed to end battle ${String(battle._id)}: ${String(error)}`,
+          );
+        }
+      }
+    }
+
+    // Case 3: WAITING quá lâu (> 5 phút) → hủy
+    const staleThreshold = new Date(now.getTime() - 5 * 60 * 1000);
+    const staleBattles = await this.battleModel.find({
+      status: BattleStatus.WAITING,
+      createdAt: { $lte: staleThreshold },
+    });
+
+    if (staleBattles.length > 0) {
+      await this.battleModel.updateMany(
+        { _id: { $in: staleBattles.map((b) => b._id) } },
+        {
+          $set: {
+            status: BattleStatus.CANCELLED,
+            endTime: now,
+          },
+        },
+      );
+      this.logger.log(
+        `🗑️ Cancelled ${staleBattles.length} stale WAITING battles`,
+      );
+    }
+
+    this.logger.log('✅ Cleanup done');
+  }
   async createBattle(
     user: { userId: string; username: string; avatar?: string },
     dto: CreateBattleDto,
@@ -77,7 +167,10 @@ export class BattlesService {
     });
 
     if (battle.status === BattleStatus.IN_PROGRESS) {
-      this.startBattleTimer(String(battle._id), battle.timeLimitSeconds);
+      this.startBattleTimer(
+        String(String(battle._id)),
+        battle.timeLimitSeconds,
+      );
     }
     return battle;
   }
@@ -86,15 +179,88 @@ export class BattlesService {
       throw new NotFoundException('Battle not found!');
     }
 
-    const battle = await this.battleModel.findById(battleId).lean();
+    const battle = await this.battleModel
+      .findById(battleId)
+      .populate('players.userId', 'username avatar')
+      .lean();
     if (!battle) {
       throw new NotFoundException('Battle not found!');
     }
 
-    const isPlayer = battle.players.some((p) => p.userId.toString() == userId);
+    const players = battle.players.map((p) => {
+      const populated = p.userId as unknown as {
+        _id?: Types.ObjectId;
+        username?: string;
+        avatar?: string;
+      };
+      const uid =
+        typeof p.userId === 'object' && populated._id
+          ? String(populated._id)
+          : String(p.userId);
+      return {
+        ...p,
+        userId: uid,
+        username: populated?.username ?? 'Unknown',
+        avatar: populated?.avatar,
+      };
+    });
+
+    const isPlayer = players.some((p) => p.userId === userId);
     if (!isPlayer) {
       throw new ForbiddenException('You are not player of this battle');
     }
+    const questions = await Promise.all(
+      battle.questionIds.map(async (qId) => {
+        const q = await this.questionsService.findById(qId.toString());
+        if (!q) return null;
+        return {
+          questionId: q._id.toString(),
+          title: q.title,
+          content: q.content,
+          difficulty: q.difficulty,
+        };
+      }),
+    );
+
+    // Aggregate Judge0 stats per player
+    const submissions = await this.submissionModel
+      .find({ battleId: new Types.ObjectId(battleId) })
+      .lean();
+
+    const playerStats = players.map((p) => {
+      const playerSubs = submissions.filter(
+        (s) => s.userId.toString() === p.userId,
+      );
+      const acceptedSubs = playerSubs.filter(
+        (s) => s.status === SubmissionStatus.ACCEPTED,
+      );
+
+      const totalPassedTests = acceptedSubs.reduce(
+        (sum, s) => sum + (s.passedTestCount ?? 0),
+        0,
+      );
+      const totalTests = acceptedSubs.reduce(
+        (sum, s) => sum + (s.totalTestCount ?? 0),
+        0,
+      );
+      const totalMemoryKb = playerSubs.reduce(
+        (sum, s) => sum + (s.memoryKb ?? 0),
+        0,
+      );
+
+      return {
+        ...p,
+        totalPassedTests,
+        totalTests,
+        totalMemoryKb,
+      };
+    });
+
+    return {
+      ...battle,
+      players: playerStats,
+      questions: questions.filter((q) => q !== null),
+    };
 
     return this.buildBattleView(battle);
   }
@@ -262,6 +428,29 @@ export class BattlesService {
       );
     }
 
+    let isCorrect = false;
+    let judgeDetails: JudgeResult | null = null;
+
+    const templates = question.templates as
+      | { starterCode?: string }[]
+      | undefined;
+    const starterCode = templates?.[0]?.starterCode ?? '';
+    const functionName = this.codeJudgeService.extractFunctionName(starterCode);
+
+    const testCasesData = (question.testCases ?? []) as {
+      input: string;
+      expectedOutput: string;
+    }[];
+
+    const judgeResult = await this.codeJudgeService.judgeCode(
+      dto.answer,
+      functionName,
+      testCasesData,
+      dto.language || 'javascript',
+    );
+
+    isCorrect = judgeResult.isCorrect;
+    judgeDetails = judgeResult;
     const normalizedAnswer = dto.answer.trim().toLowerCase();
     const normalizedExpected = (question.correctAnswer ?? '')
       .trim()
@@ -281,7 +470,7 @@ export class BattlesService {
         battleId: new Types.ObjectId(battleId),
         userId: new Types.ObjectId(userId),
         questionId: new Types.ObjectId(dto.questionId),
-        language: 'text',
+        language: dto.language || 'javascript',
         code: dto.answer,
         status: isCorrect
           ? SubmissionStatus.ACCEPTED
@@ -290,6 +479,12 @@ export class BattlesService {
         elapsedSeconds: battle.startTime
           ? Math.floor((Date.now() - battle.startTime.getTime()) / 1000)
           : 0,
+        ...(judgeDetails && {
+          passedTestCount: judgeDetails.passedTests,
+          totalTestCount: judgeDetails.totalTests,
+          memoryKb: judgeDetails.totalMemoryKb,
+          runtimeMs: judgeDetails.totalRuntimeMs,
+        }),
       }),
       this.battleModel.findByIdAndUpdate(battleId, {
         $set: {
@@ -297,6 +492,11 @@ export class BattlesService {
         },
         $inc: {
           [`players.${playerIndex}.submissionCount`]: 1,
+          ...(isCorrect && {
+            [`players.${playerIndex}.passedTestCount`]: judgeDetails
+              ? judgeDetails.passedTests
+              : 1,
+          }),
         },
       }),
     ]);
@@ -328,6 +528,7 @@ export class BattlesService {
       currentScore: newScore,
       currentQuestionIndex: correctCount,
       message: isCorrect ? 'Correct' : 'Wrong answer, -3 points',
+      ...(judgeDetails && { judgeDetails }),
     };
   }
 

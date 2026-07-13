@@ -11,7 +11,7 @@ import { UsersService } from './service/users.service';
 import { GamificationService } from './service/gamification.service';
 import { LoginAttemptService } from './service/login-attempt.service';
 import { UserRankingService } from './service/ranking.service';
-import { UsersController } from './users.controller';
+import { UsersController, MeController } from './users.controller';
 
 @Module({
   imports: [
@@ -24,7 +24,7 @@ import { UsersController } from './users.controller';
     // gộp vào GET /me/summary — tránh FE phải gọi 3-4 API riêng lẻ.
     ExercisesModule,
   ],
-  controllers: [UsersController],
+  controllers: [UsersController, MeController],
   providers: [
     UsersService,
     GamificationService,

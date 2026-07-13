@@ -27,24 +27,24 @@ import { ExercisesService } from '../exercises/exercises.service';
 import { UserDocument } from './schemas/users.schema';
 import { getXpProgress } from './service/gamification.service';
 
-@ApiTags('Users')
-@Controller()
+@ApiTags('Me')
+@Controller('me')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
-export class UsersController {
+export class MeController {
   constructor(
     private readonly users: UsersService,
     private readonly rankings: UserRankingService,
     private readonly exercises: ExercisesService,
   ) { }
 
-  @Get('me')
+  @Get()
   @ApiOperation({ summary: 'Profile của user hiện tại' })
   async getMe(@CurrentUser() user: AuthenticatedUser) {
     return this.users.findById(user.userId);
   }
 
-  @Get('me/summary')
+  @Get('summary')
   @ApiOperation({
     summary:
       'Gộp profile + gamification + rankings + progress-summary cho trang Profile, tránh FE phải gọi nhiều API rời rạc',
@@ -77,7 +77,7 @@ export class UsersController {
     };
   }
 
-  @Patch('me')
+  @Patch()
   @ApiOperation({ summary: 'Cập nhật username/avatar' })
   async updateMe(
     @CurrentUser('userId') userId: Types.ObjectId,
@@ -86,7 +86,7 @@ export class UsersController {
     return this.users.updateProfile(userId, dto);
   }
 
-  @Patch('me/preferences')
+  @Patch('preferences')
   @ApiOperation({ summary: 'Cập nhật discipline level / daily hours' })
   async updatePreferences(
     @CurrentUser('userId') userId: Types.ObjectId,
@@ -95,7 +95,7 @@ export class UsersController {
     return this.users.updatePreferences(userId, dto);
   }
 
-  @Get('me/stats')
+  @Get('stats')
   @ApiOperation({
     summary:
       'XP, level, streak, badges, coins + xpProgress (tiến độ XP trong level hiện tại, dùng để vẽ progress bar)',
@@ -109,9 +109,20 @@ export class UsersController {
       rankings,
     };
   }
+}
 
-  // 'users/leaderboard' phải đứng trước 'users/:id', nếu không ':id' sẽ bắt mất route này
-  @Get('users/leaderboard')
+@ApiTags('Users')
+@Controller('users')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
+export class UsersController {
+  constructor(
+    private readonly users: UsersService,
+    private readonly rankings: UserRankingService,
+  ) { }
+
+  // 'leaderboard' phải đứng trước ':id', nếu không ':id' sẽ bắt mất route này
+  @Get('leaderboard')
   @Public()
   @ApiOperation({ summary: 'Bảng xếp hạng theo field' })
   async leaderboard(@Query() q: LeaderboardQueryDto) {
@@ -123,8 +134,8 @@ export class UsersController {
     return paginate(items, total, q.page ?? 1, q.limit ?? 20);
   }
 
-  // Cũng phải đứng trước 'users/:id' vì cùng lý do route-matching ở trên.
-  @Get('users/leaderboard/xp')
+  // Cũng phải đứng trước ':id' vì cùng lý do route-matching ở trên.
+  @Get('leaderboard/xp')
   @Public()
   @ApiOperation({
     summary:
@@ -134,7 +145,7 @@ export class UsersController {
     return this.users.getXpLeaderboard(q.limit ?? 3);
   }
 
-  @Get('users/:id')
+  @Get(':id')
   @Public()
   @ApiOperation({
     summary: 'Public profile (cho leaderboard / battle preview)',

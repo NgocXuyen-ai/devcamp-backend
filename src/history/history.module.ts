@@ -18,6 +18,10 @@ import {
   RoadmapNodeSchema,
 } from '../learning-path/schemas/roadmap-node.schema';
 import { Battle, BattleSchema } from '../battles/schemas/battle.schema';
+import {
+  Submission,
+  SubmissionSchema,
+} from '../exercises/schemas/submission.schema';
 
 @Module({
   imports: [
@@ -27,6 +31,7 @@ import { Battle, BattleSchema } from '../battles/schemas/battle.schema';
       { name: UserProgress.name, schema: UserProgressSchema },
       { name: RoadmapNode.name, schema: RoadmapNodeSchema },
       { name: Battle.name, schema: BattleSchema },
+      { name: Submission.name, schema: SubmissionSchema },
     ]),
   ],
   controllers: [HistoryController, MeHistoryController],

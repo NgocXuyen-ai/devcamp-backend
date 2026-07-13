@@ -32,14 +32,10 @@ import { Inject } from '@nestjs/common';
 import { IQuestionService } from './interfaces/question.interface';
 import { QUESTION_SERVICE } from '../questions/interfaces/question-service.token';
 
-import { BadRequestException } from '@nestjs/common';
 import { SubmitAnswerDto } from './dto/submit-answer.dto';
 
-import { BattlesGateway } from './battles.gateway';
 import { CodeJudgeService } from '../code-execution/code-judge.service';
 import type { JudgeResult } from '../code-execution/interfaces/judge-result.interface';
-import { MockQuestionsService } from './matchmaking/mock-questions.service';
-import { SubmitAnswerDto } from './dto/submit-answer.dto';
 
 import {
   buildArenaOverview,
@@ -74,12 +70,10 @@ export class BattlesService implements OnModuleInit {
     @InjectModel(UserRanking.name)
     private readonly rankingModel: Model<UserRankingDocument>,
     private readonly matchmakingService: MatchmakingService,
-    // private readonly questionsService: MockQuestionsService,
     private readonly gateway: BattlesGateway,
     private readonly codeJudgeService: CodeJudgeService,
-  ) {}
     private readonly notifications: NotificationsService,
-  ) { }
+  ) {}
 
   async onModuleInit() {
     this.logger.log('🔄 Cleaning up stuck battles...');
@@ -261,8 +255,6 @@ export class BattlesService implements OnModuleInit {
       players: playerStats,
       questions: questions.filter((q) => q !== null),
     };
-
-    return this.buildBattleView(battle);
   }
 
   async getArenaOverview(): Promise<ArenaOverviewResponse> {
@@ -346,7 +338,9 @@ export class BattlesService implements OnModuleInit {
     }
 
     // Sort globally by rating, then assign global ranks
-    allRows.sort((a, b) => b.ratingPoints - a.ratingPoints || b.winRate - a.winRate);
+    allRows.sort(
+      (a, b) => b.ratingPoints - a.ratingPoints || b.winRate - a.winRate,
+    );
     return allRows.slice(0, limit).map((row, i) => ({ ...row, rank: i + 1 }));
   }
 
@@ -451,13 +445,6 @@ export class BattlesService implements OnModuleInit {
 
     isCorrect = judgeResult.isCorrect;
     judgeDetails = judgeResult;
-    const normalizedAnswer = dto.answer.trim().toLowerCase();
-    const normalizedExpected = (question.correctAnswer ?? '')
-      .trim()
-      .toLowerCase();
-    const isCorrect =
-      normalizedExpected.length > 0 &&
-      normalizedAnswer.includes(normalizedExpected);
 
     const player = battle.players[playerIndex];
     const newScore = isCorrect
@@ -580,7 +567,11 @@ export class BattlesService implements OnModuleInit {
       isDraw,
       finalScores,
     });
-    this.notifyPlayersOfResult(battleId, finalScores, winner?.userId.toString());
+    this.notifyPlayersOfResult(
+      battleId,
+      finalScores,
+      winner?.userId.toString(),
+    );
     return endResult;
   }
 
@@ -609,7 +600,7 @@ export class BattlesService implements OnModuleInit {
 
       if (timeRemaining <= 0) {
         this.stopBattleTimer(battleId);
-        this.endBattle(battleId).catch(() => { });
+        this.endBattle(battleId).catch(() => {});
       }
     }, 1000);
     this.battleTimers.set(battleId, interval);
@@ -742,27 +733,5 @@ export class BattlesService implements OnModuleInit {
         })
         .catch(() => undefined);
     }
-  }
-
-  private async buildBattleView(
-    battle: BattleDocument | (Battle & { _id: Types.ObjectId }),
-  ) {
-    const questions = (
-      await Promise.all(
-        battle.questionIds.map(async (questionId) =>
-          this.questionsService.findById(String(questionId)),
-        ),
-      )
-    ).filter((question) => question !== null);
-
-    return {
-      ...battle,
-      questions: questions.map((question) => ({
-        questionId: String(question._id),
-        title: question.title,
-        content: question.content,
-        difficulty: question.difficulty,
-      })),
-    };
   }
 }

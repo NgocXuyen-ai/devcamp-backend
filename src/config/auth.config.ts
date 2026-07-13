@@ -15,7 +15,6 @@ export default registerAs('auth', () => ({
   },
   login: {
     maxAttempts: parseInt(process.env.LOGIN_MAX_ATTEMPTS ?? '5', 10),
-    captchaThreshold: parseInt(process.env.LOGIN_CAPTCHA_THRESHOLD ?? '3', 10),
     lockMinutes: parseInt(process.env.LOGIN_LOCK_MINUTES ?? '15', 10),
     countWindowMinutes: parseInt(
       process.env.LOGIN_COUNT_WINDOW_MINUTES ?? '15',

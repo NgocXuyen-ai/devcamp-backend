@@ -7,10 +7,12 @@ export type LoginAttemptDocument = HydratedDocument<LoginAttempt>;
 /**
  * Login_Attempts_Log
  *
- * Drives the exponential-backoff rules described in the doc:
- *   Lần 1-3: thông báo chung
- *   Lần 4-5: hiện CAPTCHA, cooldown 30s
- *   Lần >5:  khoá account 15 phút + email cảnh báo
+ * Drives the failed-login lock rule: after `auth.login.maxAttempts`
+ * (default 5) failures within `auth.login.countWindowMinutes`, the account
+ * is locked for `auth.login.lockMinutes` + a warning email + in-app
+ * notification are sent. CAPTCHA gating was removed — `captchaRequired`/
+ * `captchaPassed` below are kept as historical fields (old rows may still
+ * have them set) but are no longer written to by new attempts.
  */
 @Schema({ timestamps: { createdAt: true, updatedAt: false } })
 export class LoginAttempt {

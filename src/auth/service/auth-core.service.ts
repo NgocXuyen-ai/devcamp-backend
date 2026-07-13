@@ -101,17 +101,7 @@ export class AuthService {
       });
     }
 
-    // 2. CAPTCHA requirement
-    const needCaptcha = await this.attempts.shouldRequireCaptcha(email);
-    if (needCaptcha && !dto.captchaToken) {
-      throw new BadRequestException({
-        message: 'CAPTCHA verification required',
-        code: 'CAPTCHA_REQUIRED',
-      });
-    }
-    // TODO: validate captchaToken with the CAPTCHA provider here.
-
-    // 3. Load user (with password)
+    // 2. Load user (with password)
     const user = await this.users.findByEmail(email);
     if (user?.isLocked && user.lockedUntil && user.lockedUntil > new Date()) {
       throw new ForbiddenException({
@@ -126,8 +116,6 @@ export class AuthService {
         result: LoginAttemptResult.USER_NOT_FOUND,
         ipAddress: context.ip,
         userAgent: context.ua,
-        captchaRequired: needCaptcha,
-        captchaPassed: needCaptcha && !!dto.captchaToken,
       });
       throw new UnauthorizedException({
         message: 'Incorrect email or password.',
@@ -144,12 +132,13 @@ export class AuthService {
         result: LoginAttemptResult.WRONG_PASSWORD,
         ipAddress: context.ip,
         userAgent: context.ua,
-        captchaRequired: needCaptcha,
-        captchaPassed: needCaptcha && !!dto.captchaToken,
       });
       await this.users.incrementFailedLogin(user._id);
 
       // If this failure just crossed the lock threshold, send warning email
+      // + in-app notification (bell/realtime) — NotificationsService.create()
+      // is already best-effort internally, so a socket/DB hiccup here can't
+      // break the login-attempt flow.
       if (await this.attempts.shouldLockAccount(email)) {
         const until = new Date(
           Date.now() +
@@ -157,6 +146,12 @@ export class AuthService {
         );
         await this.users.lockAccount(user._id, until);
         this.mail.sendSuspiciousLoginEmail(user.email).catch(() => undefined);
+        this.notifications
+          .notifySuspiciousLogin({
+            userId: user._id.toString(),
+            ipAddress: context.ip,
+          })
+          .catch(() => undefined);
       }
 
       throw new UnauthorizedException({

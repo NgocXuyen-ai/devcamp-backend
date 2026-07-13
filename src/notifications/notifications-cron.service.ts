@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { UsersService } from '../users/service/users.service';
+import { GamificationService } from '../users/service/gamification.service';
 import { RecallService } from './../recall/recall.service';
 import { NotificationsService } from './notifications.service';
 
@@ -22,6 +23,7 @@ export class NotificationsCronService {
 
     constructor(
         private readonly users: UsersService,
+        private readonly gamification: GamificationService,
         private readonly recall: RecallService,
         private readonly notifications: NotificationsService,
     ) { }
@@ -47,6 +49,7 @@ export class NotificationsCronService {
      */
     private async checkStreakReminders() {
         const threshold = new Date(Date.now() - ONE_DAY_MS); // >= 1 ngày chưa học
+        // findInactiveLearners() đã lọc sẵn currentStreak > 0 ở tầng query.
         const inactive = await this.users.findInactiveLearners(threshold);
 
         for (const learner of inactive) {
@@ -55,6 +58,33 @@ export class NotificationsCronService {
             const daysInactive = Math.floor(
                 (Date.now() - learner.lastActiveDate.getTime()) / ONE_DAY_MS,
             );
+
+            // Giữ nguyên bậc thang cảnh báo gốc: ngày 1/3/7 vẫn nhắc tăng dần
+            // (streak coi như "đang treo", chưa mất hẳn — cho user cơ hội cứu).
+            // Chỉ khi đã qua mốc cảnh báo mạnh nhất (ngày 7) mà vẫn không quay
+            // lại thì streak mới thực sự bị coi là chết — bắn streak_broken
+            // đúng 1 lần ở ngày 8, rồi reset field currentStreak về 0 (trước
+            // đó breakStreak() chưa từng được gọi ở bất kỳ đâu trong codebase,
+            // nên field này bị "mồ côi" — không tự về 0 cho tới khi user quay
+            // lại và touchStreak() âm thầm ghi đè nó, không kèm thông báo nào).
+            if (daysInactive === 8) {
+                const previousStreak = learner.currentStreak;
+                await this.gamification
+                    .breakStreak(learner.userId)
+                    .then(() =>
+                        this.notifications.notifyStreakBroken({
+                            userId: learner.userId.toString(),
+                            previousStreak,
+                        }),
+                    )
+                    .catch((err: unknown) =>
+                        this.logger.error(
+                            `breakStreak/notifyStreakBroken failed for user ${learner.userId.toString()}`,
+                            err,
+                        ),
+                    );
+                continue;
+            }
 
             const escalationLevel = this.escalationLevelFor(daysInactive);
             if (!escalationLevel) continue;

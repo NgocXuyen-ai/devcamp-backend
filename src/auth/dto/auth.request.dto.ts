@@ -1,7 +1,6 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import {
   IsEmail,
-  IsOptional,
   IsString,
   Length,
   Matches,
@@ -16,12 +15,6 @@ export class LoginDto {
   @ApiProperty({ example: '1234' })
   @IsString()
   password!: string;
-
-  /** Token from frontend CAPTCHA widget (required after 3 failures). */
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  captchaToken?: string;
 }
 
 export class ForgotPasswordDto {

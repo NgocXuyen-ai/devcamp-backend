@@ -22,6 +22,8 @@ import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersService } from './service/users.service';
 import { UserRankingService } from './service/ranking.service';
+import { ExercisesService } from '../exercises/exercises.service';
+import { UserDocument } from './schemas/users.schema';
 
 @ApiTags('Users')
 @Controller()
@@ -31,12 +33,46 @@ export class UsersController {
   constructor(
     private readonly users: UsersService,
     private readonly rankings: UserRankingService,
-  ) {}
+    private readonly exercises: ExercisesService,
+  ) { }
 
   @Get('me')
   @ApiOperation({ summary: 'Profile của user hiện tại' })
   async getMe(@CurrentUser() user: AuthenticatedUser) {
     return this.users.findById(user.userId);
+  }
+
+  @Get('me/summary')
+  @ApiOperation({
+    summary:
+      'Gộp profile + gamification + rankings + progress-summary cho trang Profile, tránh FE phải gọi nhiều API rời rạc',
+  })
+  async mySummary(@CurrentUser('userId') userId: Types.ObjectId) {
+    const [user, rankings, progressSummary] = await Promise.all([
+      this.users.findById(userId),
+      this.rankings.getForUser(userId),
+      this.exercises.getProgressSummary(userId),
+    ]);
+    return {
+      _id: user._id,
+      username: user.username,
+      email: user.email,
+      avatarUrl: user.avatarUrl,
+      bio: user.bio,
+      location: user.location,
+      socialLinks: user.socialLinks,
+      showProfile: user.showProfile,
+      showCertificates: user.showCertificates,
+      fieldFocus: user.fieldFocus,
+      selfAssessedLevel: user.selfAssessedLevel,
+      createdAt: (user as UserDocument & { createdAt: Date }).createdAt,
+      gamification: user.gamification,
+      followerCount: user.followers.length,
+      followingCount: user.following.length,
+      friendCount: user.friends.length,
+      rankings,
+      progressSummary,
+    };
   }
 
   @Patch('me')

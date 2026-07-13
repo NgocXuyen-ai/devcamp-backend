@@ -32,6 +32,24 @@ export class UserPreferences {
 }
 
 @Schema({ _id: false })
+export class UserSocialLinks {
+  // Username thô (không phải URL đầy đủ) — FE tự build link dạng
+  // https://github.com/<github>, tương tự các trang profile khác.
+  @Prop({ type: String, trim: true, maxlength: 39 })
+  github?: string;
+
+  @Prop({ type: String, trim: true, maxlength: 39 })
+  linkedin?: string;
+
+  @Prop({ type: String, trim: true, maxlength: 15 })
+  twitter?: string;
+
+  // Đây mới thực sự là URL đầy đủ (blog/portfolio cá nhân).
+  @Prop({ type: String, trim: true, maxlength: 200 })
+  website?: string;
+}
+
+@Schema({ _id: false })
 export class UserGamification {
   @Prop({ type: Number, default: 0 })
   xp!: number;
@@ -56,6 +74,13 @@ export class UserGamification {
 
   @Prop({ type: [String], default: [] })
   badges!: string[];
+
+  // === Shop item effects ===
+  @Prop({ type: Date })
+  xpBoostExpiresAt?: Date; // XP x2 còn active nếu > now
+
+  @Prop({ type: Number, default: 0 })
+  bonusSubmitAttempts!: number; // Lượt submit thêm từ shop
 }
 
 @Schema({ timestamps: true })
@@ -86,6 +111,22 @@ export class User {
 
   @Prop({ type: String })
   avatarUrl?: string;
+
+  // === Public profile ===
+  @Prop({ type: String, trim: true, maxlength: 160 })
+  bio?: string;
+
+  @Prop({ type: String, trim: true, maxlength: 80 })
+  location?: string;
+
+  @Prop({ type: UserSocialLinks, default: () => ({}) })
+  socialLinks!: UserSocialLinks;
+
+  @Prop({ type: Boolean, default: true })
+  showProfile!: boolean;
+
+  @Prop({ type: Boolean, default: true })
+  showCertificates!: boolean;
 
   @Prop({ type: Boolean, default: true })
   isFirstLogin!: boolean;

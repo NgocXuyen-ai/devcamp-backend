@@ -18,6 +18,7 @@ import {
 import { UserDocument } from '../../users/schemas/users.schema';
 import { UsersService } from '../../users/service/users.service';
 import { LoginAttemptService } from '../../users/service/login-attempt.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 import { RegisterDto } from '../dto/register.dto';
 import {
   ForgotPasswordDto,
@@ -58,11 +59,12 @@ export class AuthService {
     private readonly otpService: OtpService,
     private readonly passwords: PasswordService,
     private readonly mail: MailService,
+    private readonly notifications: NotificationsService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     @InjectModel(RefreshToken.name)
     private readonly refreshTokenModel: Model<RefreshTokenDocument>,
-  ) {}
+  ) { }
 
   // ===== Registration =====
 
@@ -99,17 +101,7 @@ export class AuthService {
       });
     }
 
-    // 2. CAPTCHA requirement
-    const needCaptcha = await this.attempts.shouldRequireCaptcha(email);
-    if (needCaptcha && !dto.captchaToken) {
-      throw new BadRequestException({
-        message: 'CAPTCHA verification required',
-        code: 'CAPTCHA_REQUIRED',
-      });
-    }
-    // TODO: validate captchaToken with the CAPTCHA provider here.
-
-    // 3. Load user (with password)
+    // 2. Load user (with password)
     const user = await this.users.findByEmail(email);
     if (user?.isLocked && user.lockedUntil && user.lockedUntil > new Date()) {
       throw new ForbiddenException({
@@ -124,8 +116,6 @@ export class AuthService {
         result: LoginAttemptResult.USER_NOT_FOUND,
         ipAddress: context.ip,
         userAgent: context.ua,
-        captchaRequired: needCaptcha,
-        captchaPassed: needCaptcha && !!dto.captchaToken,
       });
       throw new UnauthorizedException({
         message: 'Incorrect email or password.',
@@ -142,19 +132,26 @@ export class AuthService {
         result: LoginAttemptResult.WRONG_PASSWORD,
         ipAddress: context.ip,
         userAgent: context.ua,
-        captchaRequired: needCaptcha,
-        captchaPassed: needCaptcha && !!dto.captchaToken,
       });
       await this.users.incrementFailedLogin(user._id);
 
       // If this failure just crossed the lock threshold, send warning email
+      // + in-app notification (bell/realtime) — NotificationsService.create()
+      // is already best-effort internally, so a socket/DB hiccup here can't
+      // break the login-attempt flow.
       if (await this.attempts.shouldLockAccount(email)) {
         const until = new Date(
           Date.now() +
-            this.config.get<number>('auth.login.lockMinutes', 15) * 60_000,
+          this.config.get<number>('auth.login.lockMinutes', 15) * 60_000,
         );
         await this.users.lockAccount(user._id, until);
         this.mail.sendSuspiciousLoginEmail(user.email).catch(() => undefined);
+        this.notifications
+          .notifySuspiciousLogin({
+            userId: user._id.toString(),
+            ipAddress: context.ip,
+          })
+          .catch(() => undefined);
       }
 
       throw new UnauthorizedException({
@@ -177,6 +174,69 @@ export class AuthService {
 
     const tokens = await this.issueTokenPair(user, context);
     return { user, tokens };
+  }
+
+  /**
+   * Nhận Google OAuth access_token do FE lấy được từ useGoogleLogin,
+   * gọi Google UserInfo endpoint để verify token này thật sự hợp lệ
+   * và lấy profile (sub, email, name, picture), sau đó login/tạo user
+   * qua loginOrCreateFromOAuth() đã có sẵn.
+   *
+   * Lưu ý: đây là access_token (không phải id_token dạng JWT), nên
+   * không thể verify bằng thư viện JWT/google-auth-library thông thường -
+   * phải gọi thẳng endpoint userinfo của Google để xác thực.
+   */
+  async loginWithGoogleAccessToken(
+    googleAccessToken: string,
+  ): Promise<{ user: UserDocument; tokens: TokenPair; isNewUser: boolean }> {
+    let profile: {
+      sub?: string;
+      email?: string;
+      email_verified?: boolean;
+      name?: string;
+      picture?: string;
+    };
+
+    try {
+      const res = await fetch(
+        'https://www.googleapis.com/oauth2/v3/userinfo',
+        { headers: { Authorization: `Bearer ${googleAccessToken}` } },
+      );
+      if (!res.ok) {
+        throw new Error(`Google responded ${res.status}`);
+      }
+      profile = await res.json();
+    } catch {
+      // Token sai, hết hạn, hoặc bị revoke -> Google trả 401/400 ở bước fetch.
+      throw new UnauthorizedException({
+        message: 'Invalid or expired Google access token',
+        code: 'INVALID_GOOGLE_TOKEN',
+      });
+    }
+
+    if (!profile.sub || !profile.email) {
+      throw new UnauthorizedException({
+        message: 'Google account is missing required profile fields',
+        code: 'INVALID_GOOGLE_TOKEN',
+      });
+    }
+
+    // Chặn trường hợp email Google chưa được verify (hiếm nhưng vẫn có thể
+    // xảy ra) để tránh ai đó dùng email chưa xác thực chiếm tài khoản trùng.
+    if (profile.email_verified === false) {
+      throw new UnauthorizedException({
+        message: 'Google email is not verified',
+        code: 'GOOGLE_EMAIL_NOT_VERIFIED',
+      });
+    }
+
+    return this.loginOrCreateFromOAuth({
+      provider: LoginProvider.GOOGLE,
+      providerId: profile.sub,
+      email: profile.email.toLowerCase(),
+      username: profile.name ?? profile.email.split('@')[0],
+      avatarUrl: profile.picture,
+    });
   }
 
   async loginOrCreateFromOAuth(params: {

@@ -4,11 +4,13 @@ import {
   ForbiddenException,
   OnModuleInit,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-
+import { BattlesGateway } from './battles.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Battle, BattleDocument } from './schemas/battle.schema';
 import {
   UserRanking,
@@ -23,7 +25,7 @@ import { CreateBattleDto } from './dto/create-battle.dto';
 import { GetHistoryDto } from './dto/get-history.dto';
 import { GetLeaderboardDto } from './dto/get-leaderboard.dto';
 
-import { BattleStatus, SubmissionStatus } from '../common/enums';
+import { BattleStatus, CareerField, SubmissionStatus } from '../common/enums';
 
 import { MatchmakingService } from './matchmaking/matchmaking.service';
 import { Inject } from '@nestjs/common';
@@ -36,6 +38,13 @@ import { SubmitAnswerDto } from './dto/submit-answer.dto';
 import { BattlesGateway } from './battles.gateway';
 import { CodeJudgeService } from '../code-execution/code-judge.service';
 import type { JudgeResult } from '../code-execution/interfaces/judge-result.interface';
+import { MockQuestionsService } from './matchmaking/mock-questions.service';
+import { SubmitAnswerDto } from './dto/submit-answer.dto';
+
+import {
+  buildArenaOverview,
+  type ArenaOverviewResponse,
+} from './data/arena-overview.data';
 
 export interface LeaderboardRow {
   rank: number;
@@ -69,6 +78,8 @@ export class BattlesService implements OnModuleInit {
     private readonly gateway: BattlesGateway,
     private readonly codeJudgeService: CodeJudgeService,
   ) {}
+    private readonly notifications: NotificationsService,
+  ) { }
 
   async onModuleInit() {
     this.logger.log('🔄 Cleaning up stuck battles...');
@@ -250,6 +261,26 @@ export class BattlesService implements OnModuleInit {
       players: playerStats,
       questions: questions.filter((q) => q !== null),
     };
+
+    return this.buildBattleView(battle);
+  }
+
+  async getArenaOverview(): Promise<ArenaOverviewResponse> {
+    const [rankedProfiles, liveBattles, completedBattles] = await Promise.all([
+      this.rankingModel.countDocuments(),
+      this.battleModel.countDocuments({
+        status: { $in: [BattleStatus.WAITING, BattleStatus.IN_PROGRESS] },
+      }),
+      this.battleModel.countDocuments({
+        status: { $in: [BattleStatus.FINISHED, BattleStatus.CANCELLED] },
+      }),
+    ]);
+
+    return buildArenaOverview({
+      rankedProfiles,
+      liveBattles,
+      completedBattles,
+    });
   }
   async getUserHistory(userId: string, dto: GetHistoryDto) {
     const page = dto.page ?? 1;
@@ -280,6 +311,45 @@ export class BattlesService implements OnModuleInit {
       },
     };
   }
+  async getGlobalLeaderboard(limit = 50): Promise<LeaderboardRow[]> {
+    const fields = Object.values(CareerField);
+    const allRows: LeaderboardRow[] = [];
+
+    for (const field of fields) {
+      const rankings = await this.rankingModel
+        .find({ field })
+        .sort({ ratingPoints: -1, winRate: -1 })
+        .limit(limit)
+        .populate({ path: 'userId', select: 'username' })
+        .lean();
+
+      for (let i = 0; i < rankings.length; i++) {
+        const r = rankings[i];
+        const populated = r.userId as unknown as {
+          _id?: Types.ObjectId;
+          username?: string;
+        } | null;
+        allRows.push({
+          rank: 0,
+          userId: populated?._id ? String(populated._id) : String(r.userId),
+          username: populated?.username ?? 'Unknown',
+          field: r.field,
+          ratingPoints: r.ratingPoints,
+          totalBattles: r.totalBattles,
+          wins: r.wins,
+          losses: r.losses,
+          draws: r.draws,
+          winRate: r.winRate,
+          tier: r.tier,
+        });
+      }
+    }
+
+    // Sort globally by rating, then assign global ranks
+    allRows.sort((a, b) => b.ratingPoints - a.ratingPoints || b.winRate - a.winRate);
+    return allRows.slice(0, limit).map((row, i) => ({ ...row, rank: i + 1 }));
+  }
+
   async getLeaderboard(dto: GetLeaderboardDto): Promise<LeaderboardRow[]> {
     const limit = dto.limit ?? 20;
 
@@ -381,6 +451,13 @@ export class BattlesService implements OnModuleInit {
 
     isCorrect = judgeResult.isCorrect;
     judgeDetails = judgeResult;
+    const normalizedAnswer = dto.answer.trim().toLowerCase();
+    const normalizedExpected = (question.correctAnswer ?? '')
+      .trim()
+      .toLowerCase();
+    const isCorrect =
+      normalizedExpected.length > 0 &&
+      normalizedAnswer.includes(normalizedExpected);
 
     const player = battle.players[playerIndex];
     const newScore = isCorrect
@@ -503,11 +580,13 @@ export class BattlesService implements OnModuleInit {
       isDraw,
       finalScores,
     });
+    this.notifyPlayersOfResult(battleId, finalScores, winner?.userId.toString());
     return endResult;
   }
+
   async getSubmissions(battleId: string, userId?: string) {
     if (!Types.ObjectId.isValid(battleId)) {
-      throw new NotFoundException('Battle not foun');
+      throw new NotFoundException('Battle not found');
     }
     const filter: Record<string, unknown> = {
       battleId: new Types.ObjectId(battleId),
@@ -530,11 +609,12 @@ export class BattlesService implements OnModuleInit {
 
       if (timeRemaining <= 0) {
         this.stopBattleTimer(battleId);
-        this.endBattle(battleId).catch(() => {});
+        this.endBattle(battleId).catch(() => { });
       }
     }, 1000);
     this.battleTimers.set(battleId, interval);
   }
+
   stopBattleTimer(battleId: string) {
     const interval = this.battleTimers.get(battleId);
     if (interval) {
@@ -542,6 +622,7 @@ export class BattlesService implements OnModuleInit {
       this.battleTimers.delete(battleId);
     }
   }
+
   async abandonBattle(battleId: string, userId: string) {
     if (!Types.ObjectId.isValid(battleId))
       throw new NotFoundException('Battle not found');
@@ -580,6 +661,25 @@ export class BattlesService implements OnModuleInit {
       isDraw: false,
       finalScores,
     });
+    // Chỉ báo cho đối thủ còn lại ("đối thủ đã bỏ cuộc, bạn thắng") —
+    // người tự bỏ cuộc vừa chủ động thoát nên không cần nhắc lại trong app.
+    if (opponent) {
+      const opponentScore =
+        finalScores.find((s) => s.userId === opponent.userId.toString())
+          ?.score ?? 0;
+      const abandonerScore =
+        finalScores.find((s) => s.userId === userId)?.score ?? 0;
+      this.notifications
+        .notifyBattleResult({
+          userId: opponent.userId.toString(),
+          battleId,
+          won: true,
+          isDraw: false,
+          myScore: opponentScore,
+          opponentScore: abandonerScore,
+        })
+        .catch(() => undefined);
+    }
     return {
       message: 'Battle abandoned',
       winnerId: opponent?.userId.toString(),
@@ -617,5 +717,52 @@ export class BattlesService implements OnModuleInit {
       });
     });
     await Promise.all(updates);
+  }
+
+  private notifyPlayersOfResult(
+    battleId: string,
+    finalScores: { userId: string; score: number }[],
+    winnerId?: string,
+  ) {
+    for (const player of finalScores) {
+      const opponentScoreEntry = finalScores.find(
+        (s) => s.userId !== player.userId,
+      );
+      const won = winnerId ? winnerId === player.userId : false;
+      const isDraw = !winnerId;
+
+      this.notifications
+        .notifyBattleResult({
+          userId: player.userId,
+          battleId,
+          won,
+          isDraw,
+          myScore: player.score,
+          opponentScore: opponentScoreEntry?.score ?? 0,
+        })
+        .catch(() => undefined);
+    }
+  }
+
+  private async buildBattleView(
+    battle: BattleDocument | (Battle & { _id: Types.ObjectId }),
+  ) {
+    const questions = (
+      await Promise.all(
+        battle.questionIds.map(async (questionId) =>
+          this.questionsService.findById(String(questionId)),
+        ),
+      )
+    ).filter((question) => question !== null);
+
+    return {
+      ...battle,
+      questions: questions.map((question) => ({
+        questionId: String(question._id),
+        title: question.title,
+        content: question.content,
+        difficulty: question.difficulty,
+      })),
+    };
   }
 }

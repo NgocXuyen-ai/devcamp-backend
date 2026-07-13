@@ -26,7 +26,7 @@ export interface CreateUserInput {
 export class UsersService {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-  ) {}
+  ) { }
 
   async create(input: CreateUserInput): Promise<UserDocument> {
     const exists = await this.userModel.exists({
@@ -192,6 +192,22 @@ export class UsersService {
       this.userModel.countDocuments(query),
     ]);
     return { items, total };
+  }
+
+  async findInactiveLearners(thresholdDate: Date): Promise<{ userId: Types.ObjectId; currentStreak: number; lastActiveDate?: Date }[]> {
+    const rows = await this.userModel
+      .find({
+        'gamification.currentStreak': { $gt: 0 },
+        'gamification.lastActiveDate': { $lte: thresholdDate },
+      })
+      .select('_id gamification.currentStreak gamification.lastActiveDate')
+      .lean();
+
+    return rows.map((u: any) => ({
+      userId: u._id,
+      currentStreak: u.gamification?.currentStreak ?? 0,
+      lastActiveDate: u.gamification?.lastActiveDate,
+    }));
   }
 
   // ----- admin operations -----

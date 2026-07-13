@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ExercisesModule } from '../exercises/exercises.module';
 import { User, UserSchema } from './schemas/users.schema';
 import {
   LoginAttempt,
@@ -19,6 +20,9 @@ import { UsersController } from './users.controller';
       { name: LoginAttempt.name, schema: LoginAttemptSchema },
       { name: UserRanking.name, schema: UserRankingSchema },
     ]),
+    // Dùng ExercisesService.getProgressSummary()/getActivityCalendar() để
+    // gộp vào GET /me/summary — tránh FE phải gọi 3-4 API riêng lẻ.
+    ExercisesModule,
   ],
   controllers: [UsersController],
   providers: [
@@ -35,4 +39,4 @@ import { UsersController } from './users.controller';
     MongooseModule,
   ],
 })
-export class UsersModule {}
+export class UsersModule { }

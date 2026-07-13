@@ -20,6 +20,8 @@ import { CodeExecutionModule } from '../code-execution/code-execution.module';
 // import { MockQuestionsService } from './matchmaking/mock-questions.service';
 
 import { QuestionsModule } from '../questions/questions.module';
+import { MockQuestionsService } from './matchmaking/mock-questions.service';
+import { NotificationsModule } from '../notifications/notification.module';
 
 @Module({
   imports: [
@@ -30,6 +32,7 @@ import { QuestionsModule } from '../questions/questions.module';
     ]),
     QuestionsModule,
     CodeExecutionModule,
+    NotificationsModule,
   ],
   controllers: [BattlesController],
   providers: [
@@ -41,4 +44,4 @@ import { QuestionsModule } from '../questions/questions.module';
   ],
   exports: [BattlesService],
 })
-export class BattlesModule {}
+export class BattlesModule { }

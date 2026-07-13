@@ -23,9 +23,9 @@ describe('SkillTestService', () => {
     );
 
     expect(problems).toHaveLength(5);
-    expect(new Set(problems.map((problem) => problem._id.toString())).size).toBe(
-      5,
-    );
+    expect(
+      new Set(problems.map((problem) => problem._id.toString())).size,
+    ).toBe(5);
     expect(
       problems.every(
         (problem) =>

@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Types } from 'mongoose';
-import { SubmissionStatus } from '../../common/enums';
+import { QuestionDifficulty, SubmissionStatus } from '../../common/enums';
 
 export type SubmissionDocument = HydratedDocument<Submission>;
 
@@ -53,6 +53,9 @@ export class Submission {
 
   @Prop({ type: String, required: true })
   track!: string;
+
+  @Prop({ type: String, enum: QuestionDifficulty })
+  difficulty?: QuestionDifficulty;
 
   /** Either a Question OR an Exercise — track separately */
   @Prop({ type: Types.ObjectId, ref: 'Question' })

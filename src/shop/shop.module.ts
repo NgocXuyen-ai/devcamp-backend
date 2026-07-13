@@ -18,6 +18,7 @@ import {
   ShopCouponRedemption,
   ShopCouponRedemptionSchema,
 } from './schemas/shop-coupon-redemption.schema';
+import { NotificationsModule } from '../notifications/notification.module';
 
 @Module({
   imports: [
@@ -29,8 +30,9 @@ import {
       { name: ShopCoupon.name, schema: ShopCouponSchema },
       { name: ShopCouponRedemption.name, schema: ShopCouponRedemptionSchema },
     ]),
+    NotificationsModule,
   ],
   controllers: [ShopController],
   providers: [ShopService],
 })
-export class ShopModule {}
+export class ShopModule { }

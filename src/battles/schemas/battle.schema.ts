@@ -14,6 +14,12 @@ export class BattlePlayer {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId!: Types.ObjectId;
 
+  @Prop({ type: String })
+  username?: string;
+
+  @Prop({ type: String })
+  avatar?: string;
+
   @Prop({ type: Number, default: 1000 })
   ratingBefore!: number;
 

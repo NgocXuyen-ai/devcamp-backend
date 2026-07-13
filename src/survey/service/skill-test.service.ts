@@ -352,7 +352,10 @@ export class SkillTestService {
     // Group by level distance
     const groups: Record<number, SurveyCodingProblemDefinition[]> = {};
     for (const problem of pool) {
-      const dist = this.getLevelDistance(problem.targetSkillLevel, selectedLevel);
+      const dist = this.getLevelDistance(
+        problem.targetSkillLevel,
+        selectedLevel,
+      );
       if (!groups[dist]) {
         groups[dist] = [];
       }
@@ -457,9 +460,7 @@ export class SkillTestService {
     }
 
     if (selectedBand === LessonLevel.INTERMEDIATE) {
-      return normalizedScore > 50
-        ? LessonLevel.INTERMEDIATE
-        : LessonLevel.ROOT;
+      return normalizedScore > 50 ? LessonLevel.INTERMEDIATE : LessonLevel.ROOT;
     }
 
     return LessonLevel.ROOT;

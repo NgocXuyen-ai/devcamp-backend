@@ -48,4 +48,9 @@ export class PracticeEvaluationDto {
   @IsOptional()
   @IsString()
   nodeId?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['Easy', 'Medium', 'Hard', 'easy', 'medium', 'hard'])
+  difficulty?: string;
 }

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { MongooseModule } from '@nestjs/mongoose';
 import { PassportModule } from '@nestjs/passport';
+import { NotificationsModule } from '../notifications/notification.module';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
@@ -20,6 +21,7 @@ import { PasswordService } from './service/password.service';
   imports: [
     UsersModule,
     PassportModule,
+    NotificationsModule,
     MongooseModule.forFeature([
       { name: RefreshToken.name, schema: RefreshTokenSchema },
       { name: Otp.name, schema: OtpSchema },
@@ -41,4 +43,4 @@ import { PasswordService } from './service/password.service';
   ],
   exports: [AuthService],
 })
-export class AuthModule {}
+export class AuthModule { }

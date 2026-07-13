@@ -1,6 +1,7 @@
 import { Logger, Module, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ScheduleModule } from '@nestjs/schedule';
 import { Connection } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { mkdirSync } from 'node:fs';
@@ -23,6 +24,7 @@ import { ExercisesModule } from './exercises/exercises.module';
 import { ErrorTrackingModule } from './error-tracking/error-tracking.module';
 import { HistoryModule } from './history/history.module';
 import { NotificationsModule } from './notifications/notification.module';
+import { NotificationsCronModule } from './notifications/notifications-cron.module';
 import { SurveyModule } from './survey/survey.module';
 import { AdminModule } from './admin/admin.module';
 import { CommonModule } from './common/common.module';
@@ -31,6 +33,7 @@ import { ForumModule } from './forum/forum.module';
 import { SocialModule } from './social/social.module';
 import { FooterModule } from './footer/footer.module';
 import { CodeAnalysisModule } from './code-analysis/code-analysis.module';
+import { GuildsModule } from './guilds/guilds.module';
 
 let memoryMongoServer: MongoMemoryServer | null = null;
 const persistentMongoPath = join(process.cwd(), '.local-data', 'mongodb');
@@ -41,6 +44,8 @@ const persistentMongoPath = join(process.cwd(), '.local-data', 'mongodb');
       isGlobal: true,
       load: [appConfig, authConfig, databaseConfig, mailConfig, oauthConfig],
     }),
+
+    ScheduleModule.forRoot(),
 
     MongooseModule.forRootAsync({
       inject: [ConfigService],
@@ -105,6 +110,7 @@ const persistentMongoPath = join(process.cwd(), '.local-data', 'mongodb');
     ErrorTrackingModule,
     HistoryModule,
     NotificationsModule,
+    NotificationsCronModule,
     SurveyModule,
     AdminModule,
     ShopModule,
@@ -112,6 +118,7 @@ const persistentMongoPath = join(process.cwd(), '.local-data', 'mongodb');
     SocialModule,
     FooterModule,
     CodeAnalysisModule,
+    GuildsModule,
   ],
 })
 export class AppModule implements OnApplicationShutdown {

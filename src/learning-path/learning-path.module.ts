@@ -17,6 +17,8 @@ import {
   LearningHistory,
   LearningHistorySchema,
 } from '../history/schemas/learning-history.schema';
+import { NotificationsModule } from '../notifications/notification.module';
+import { RecallModule } from '../recall/recall.module';
 
 @Module({
   imports: [
@@ -26,9 +28,11 @@ import {
       { name: UserProgress.name, schema: UserProgressSchema },
       { name: LearningHistory.name, schema: LearningHistorySchema },
     ]),
+    NotificationsModule,
+    RecallModule,
   ],
   controllers: [LearningPathController],
   providers: [LearningPathService, RoadmapService, RoadmapNodeService],
   exports: [LearningPathService, RoadmapService, RoadmapNodeService],
 })
-export class LearningPathModule {}
+export class LearningPathModule { }

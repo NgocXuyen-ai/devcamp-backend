@@ -22,6 +22,7 @@ import {
   ShopCouponRedemption,
   ShopCouponRedemptionDocument,
 } from './schemas/shop-coupon-redemption.schema';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -45,7 +46,8 @@ export class ShopService implements OnModuleInit {
     private readonly couponModel: Model<ShopCouponDocument>,
     @InjectModel(ShopCouponRedemption.name)
     private readonly redemptionModel: Model<ShopCouponRedemptionDocument>,
-  ) {}
+    private readonly notifications: NotificationsService,
+  ) { }
 
   async onModuleInit() {
     await this.ensureSeedData();
@@ -193,6 +195,11 @@ export class ShopService implements OnModuleInit {
       coins,
       canClaimDailyReward,
       lastDailyClaimAt: lastClaim ?? null,
+      // Active effects từ shop items
+      xpBoostExpiresAt:
+        user.gamification?.xpBoostExpiresAt?.toISOString() ?? null,
+      bonusSubmitAttempts: user.gamification?.bonusSubmitAttempts ?? 0,
+      badges: user.gamification?.badges ?? [],
       inventory: inventory.map((row) => ({
         id: String(row._id),
         quantity: row.quantity,
@@ -325,6 +332,17 @@ export class ShopService implements OnModuleInit {
     }));
     await this.inventoryModel.bulkWrite(bulk);
 
+    // Best-effort — lỗi emit notification không được làm hỏng giao dịch
+    // đã thực hiện xong (coin đã trừ, inventory đã cập nhật).
+    this.notifications
+      .notifyShopPurchase({
+        userId: userId.toString(),
+        purchaseId: String(createdPurchase._id),
+        itemNames: purchaseLines.map((line) => line.name),
+        totalCoins,
+      })
+      .catch(() => undefined);
+
     return {
       coins: user.gamification.coins,
       purchaseId: String(createdPurchase._id),
@@ -344,6 +362,78 @@ export class ShopService implements OnModuleInit {
     inv.lastUsedAt = new Date();
     await inv.save();
 
-    return { ok: true, remaining: inv.quantity };
+    // Lấy thông tin item để áp dụng effect
+    const item = await this.itemModel.findById(inv.itemId).lean().exec();
+
+    const user = await this.userModel.findById(userId).exec();
+    if (user) {
+      switch (item?.sku) {
+        case 'BOOST_XP_1H':
+          // Kích hoạt XP x2 trong 1 giờ (cộng dồn nếu đang active)
+          {
+            const now = Date.now();
+            const current = user.gamification?.xpBoostExpiresAt
+              ? user.gamification.xpBoostExpiresAt.getTime()
+              : now;
+            user.gamification.xpBoostExpiresAt = new Date(
+              Math.max(current, now) + 60 * 60 * 1000,
+            );
+          }
+          break;
+
+        case 'EXTRA_SUBMISSIONS_5':
+          // Tặng thêm 5 lượt submit
+          user.gamification.bonusSubmitAttempts =
+            (user.gamification.bonusSubmitAttempts ?? 0) + 5;
+          break;
+
+        case 'NAME_TAG_GOLD':
+          // Thêm badge nếu chưa có
+          if (!user.gamification.badges.includes('gold-name-tag')) {
+            user.gamification.badges.push('gold-name-tag');
+          }
+          break;
+
+        case 'SKIN_NEON':
+          // Cosmetic — effect xử lý phía FE (lưu localStorage)
+          // Không cần thay đổi DB, chỉ trả về signal
+          break;
+      }
+      await user.save();
+    }
+
+    // Tạo message mô tả effect cho FE hiển thị
+    const effectMessages: Record<string, { vi: string; en: string }> = {
+      BOOST_XP_1H: {
+        vi: '🚀 XP Boost đã kích hoạt — nhận 2x XP trong 1 giờ!',
+        en: '🚀 XP Boost activated — earn 2x XP for 1 hour!',
+      },
+      EXTRA_SUBMISSIONS_5: {
+        vi: '✅ Đã thêm 5 lượt submit vào tài khoản!',
+        en: '✅ 5 extra submission attempts added to your account!',
+      },
+      NAME_TAG_GOLD: {
+        vi: '🏅 Gold Name Tag đã được gắn vào hồ sơ!',
+        en: '🏅 Gold Name Tag has been added to your profile!',
+      },
+      SKIN_NEON: {
+        vi: '✨ Neon Theme đã được kích hoạt!',
+        en: '✨ Neon Theme has been activated!',
+      },
+    };
+
+    const sku = item?.sku ?? '';
+    const msg = effectMessages[sku] ?? { vi: 'Đã sử dụng.', en: 'Used.' };
+
+    return {
+      ok: true,
+      remaining: inv.quantity,
+      sku,
+      effectVi: msg.vi,
+      effectEn: msg.en,
+      xpBoostExpiresAt:
+        user?.gamification?.xpBoostExpiresAt?.toISOString() ?? null,
+      bonusSubmitAttempts: user?.gamification?.bonusSubmitAttempts ?? 0,
+    };
   }
 }

@@ -16,6 +16,8 @@ import {
   LessonLevel,
   NodeStatus,
 } from '../common/enums';
+import { NotificationsService } from '../notifications/notifications.service';
+import { RecallService } from '../recall/recall.service';
 
 const ROADMAP_STAGE_SIZE = 10;
 type RoadmapWithId = Roadmap & { _id: Types.ObjectId };
@@ -34,7 +36,10 @@ export class LearningPathService {
 
     @InjectModel(LearningHistory.name)
     private readonly historyModel: Model<LearningHistory>,
-  ) {}
+
+    private readonly notifications: NotificationsService,
+    private readonly recall: RecallService,
+  ) { }
 
   // =========================
   // ROADMAP
@@ -112,6 +117,14 @@ export class LearningPathService {
     const now = new Date();
     const isCompleted = dto.status === NodeStatus.COMPLETED;
 
+    // Lấy trạng thái cũ trước khi update, để chỉ báo LESSON_UNLOCK đúng
+    // lần đầu chuyển sang completed — tránh spam nếu user nộp lại bài
+    // của 1 node đã xong từ trước.
+    const previous = await this.progressModel
+      .findOne({ userId, nodeId: new Types.ObjectId(nodeId) })
+      .lean();
+    const wasCompleted = previous?.status === NodeStatus.COMPLETED;
+
     const progress = await this.progressModel.findOneAndUpdate(
       {
         userId,
@@ -147,6 +160,22 @@ export class LearningPathService {
       // Activity feed là phụ — lỗi ghi history không được làm hỏng việc lưu progress.
     }
 
+    // Báo "bài học mới mở khóa" + khởi tạo lịch ôn tập SM-2, đúng lần đầu
+    // hoàn thành node này.
+    if (isCompleted && !wasCompleted) {
+      this.notifications
+        .notifyLessonUnlock({
+          userId: userId.toString(),
+          nodeId,
+          nodeTitle: node.title,
+        })
+        .catch(() => undefined);
+
+      this.recall
+        .scheduleInitialReview(userId, new Types.ObjectId(nodeId))
+        .catch(() => undefined);
+    }
+
     return progress;
   }
 
@@ -162,21 +191,31 @@ export class LearningPathService {
   async syncSurveyPlacement(
     userId: Types.ObjectId,
     entryLevel: LessonLevel,
+    fieldFocus?: CareerField,
   ): Promise<void> {
+    const fieldsToSync: CareerField[] = [];
+    if (fieldFocus === CareerField.FULLSTACK || !fieldFocus) {
+      fieldsToSync.push(CareerField.FRONTEND, CareerField.BACKEND);
+    } else if (fieldFocus === CareerField.FRONTEND) {
+      fieldsToSync.push(CareerField.FRONTEND);
+    } else if (fieldFocus === CareerField.BACKEND) {
+      fieldsToSync.push(CareerField.BACKEND);
+    }
+
     const roadmaps = await this.roadmapModel
       .find({
         field: {
-          $in: [CareerField.FRONTEND, CareerField.BACKEND],
+          $in: fieldsToSync,
         },
         isActive: true,
       })
       .sort({ createdAt: -1 });
 
     const selectedRoadmaps: RoadmapWithId[] = [];
-    for (const field of [CareerField.FRONTEND, CareerField.BACKEND]) {
+    for (const field of fieldsToSync) {
       const roadmap = roadmaps.find((item) => item.field === field);
       if (roadmap) {
-        selectedRoadmaps.push(roadmap as RoadmapWithId);
+        selectedRoadmaps.push(roadmap);
       }
     }
 
@@ -203,7 +242,10 @@ export class LearningPathService {
       roadmapId: roadmap._id,
     });
     const existingByNodeId = new Map(
-      existingProgress.map((progress) => [progress.nodeId.toString(), progress]),
+      existingProgress.map((progress) => [
+        progress.nodeId.toString(),
+        progress,
+      ]),
     );
     const hasMeaningfulProgress = existingProgress.some(
       (progress) =>

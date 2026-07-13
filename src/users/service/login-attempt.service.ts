@@ -24,7 +24,7 @@ export class LoginAttemptService {
     @InjectModel(LoginAttempt.name)
     private readonly attemptModel: Model<LoginAttemptDocument>,
     private readonly config: ConfigService,
-  ) {}
+  ) { }
 
   async record(params: RecordParams): Promise<LoginAttemptDocument> {
     return this.attemptModel.create({
@@ -49,11 +49,6 @@ export class LoginAttemptService {
       result: { $ne: LoginAttemptResult.SUCCESS },
       createdAt: { $gte: since },
     });
-  }
-
-  async shouldRequireCaptcha(email: string): Promise<boolean> {
-    const threshold = this.config.get<number>('auth.login.captchaThreshold', 3);
-    return (await this.countRecentFailures(email)) >= threshold;
   }
 
   async shouldLockAccount(email: string): Promise<boolean> {

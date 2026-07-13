@@ -3,7 +3,15 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Submission, SubmissionDocument } from './schemas/submission.schema';
 import { PracticeEvaluationDto } from './dto/practice-evaluation.dto';
-import { SubmissionStatus as DbSubmissionStatus } from '../common/enums';
+import {
+  SubmissionStatus as DbSubmissionStatus,
+  QuestionDifficulty,
+} from '../common/enums';
+import { User, UserDocument } from '../users/schemas/users.schema';
+import {
+  RoadmapNode,
+  RoadmapNodeDocument,
+} from '../learning-path/schemas/roadmap-node.schema';
 import {
   runExecutableEvaluation,
   supportsExecutableRunner,
@@ -13,6 +21,7 @@ import type {
   JudgeRunResult,
   SubmissionStatusLabel,
 } from './judge.types';
+import { NotificationsService } from '../notifications/notifications.service';
 
 type JudgeTemplate = {
   id: string;
@@ -34,12 +43,66 @@ type SubmissionRecord = {
   notes: string;
 };
 
+type DifficultyBreakdown = {
+  easy: number;
+  medium: number;
+  hard: number;
+};
+
+type ChapterProgressSummary = {
+  chapter: string;
+  breakdown: DifficultyBreakdown;
+};
+
+type ProgressSummaryResponse = {
+  solvedPracticeIds: string[];
+  overall: DifficultyBreakdown;
+  chapters: ChapterProgressSummary[];
+};
+
+/** Một ô trong heatmap: ngày (yyyy-MM-dd, theo giờ local server) + số submission trong ngày đó. */
+type ActivityDay = {
+  date: string;
+  count: number;
+};
+
+type ActivityCalendarResponse = {
+  /** Tổng số submission trong khoảng thời gian trả về. */
+  totalSubmissions: number;
+  /** Số ngày riêng biệt có ít nhất 1 submission (kể cả submission fail). */
+  totalActiveDays: number;
+  /** Streak dài nhất từng đạt được, tính trên toàn bộ lịch sử submission. */
+  maxStreak: number;
+  /** Streak hiện tại tính đến hôm nay (0 nếu hôm qua không active và hôm nay cũng chưa). */
+  currentStreak: number;
+  /** Ngày bắt đầu / kết thúc của dải dữ liệu trả về (dùng để FE vẽ đúng số cột tuần). */
+  rangeStart: string;
+  rangeEnd: string;
+  /** Danh sách các ngày có hoạt động, chỉ chứa ngày có count > 0 (ngày trống suy ra ở FE). */
+  days: ActivityDay[];
+};
+
+const EMPTY_BREAKDOWN = (): DifficultyBreakdown => ({
+  easy: 0,
+  medium: 0,
+  hard: 0,
+});
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 @Injectable()
 export class ExercisesService {
   constructor(
     @InjectModel(Submission.name)
     private readonly submissionModel: Model<SubmissionDocument>,
-  ) {}
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
+    @InjectModel(RoadmapNode.name)
+    private readonly roadmapNodeModel: Model<RoadmapNodeDocument>,
+    private readonly notifications: NotificationsService,
+  ) { }
 
   async run(dto: PracticeEvaluationDto): Promise<JudgeRunResult> {
     return this.evaluate(dto, 'sample');
@@ -53,16 +116,20 @@ export class ExercisesService {
         userId,
       })) + 1;
 
+    const dbStatus = this.toDbSubmissionStatus(runResult.status);
+    const normalizedDifficulty = await this.resolveDifficulty(dto);
+
     const created = await this.submissionModel.create({
       userId,
       practiceId: dto.practiceId,
       title: dto.title,
       topic: dto.topic,
       track: dto.track,
+      difficulty: normalizedDifficulty,
       nodeId: this.toObjectId(dto.nodeId),
       language: dto.language,
       code: dto.code,
-      status: this.toDbSubmissionStatus(runResult.status),
+      status: dbStatus,
       score:
         runResult.total === 0
           ? 0
@@ -89,6 +156,31 @@ export class ExercisesService {
       triggeredPenalty: false,
     });
 
+    // ─── Coin reward on first Accepted submission ────────────────────────
+    let coinsEarned = 0;
+    if (dbStatus === DbSubmissionStatus.ACCEPTED) {
+      coinsEarned = await this.awardCoinsForAccepted(
+        userId,
+        created._id,
+        dto.practiceId,
+        normalizedDifficulty,
+      );
+
+      // coinsEarned > 0 chỉ đúng ở lần Accepted ĐẦU TIÊN cho bài này (xem
+      // awardCoinsForAccepted) — dùng luôn điều kiện này để tránh spam
+      // notification khi user submit lại bài đã Accepted từ trước.
+      if (coinsEarned > 0) {
+        this.notifications
+          .notifyPracticeSolved({
+            userId: userId.toString(),
+            practiceId: dto.practiceId,
+            practiceTitle: dto.title,
+            coinsEarned,
+          })
+          .catch(() => undefined);
+      }
+    }
+
     const submission = this.toSubmissionRecord(created);
     const submissions = await this.getSubmissions(userId, dto.practiceId);
 
@@ -96,6 +188,7 @@ export class ExercisesService {
       runResult,
       submission,
       submissions,
+      coinsEarned,
     };
   }
 
@@ -110,6 +203,198 @@ export class ExercisesService {
       .lean();
 
     return items.map((item) => this.toSubmissionRecord(item));
+  }
+
+  /**
+   * Heatmap kiểu LeetCode: gom số submission theo từng ngày trong `rangeDays`
+   * ngày gần nhất (mặc định 365, khớp UI "submissions in the past one year").
+   *
+   * Ngày được chốt theo giờ LOCAL của server (không phải UTC), giống hệt cách
+   * `GamificationService.touchStreak` đang tính "hôm nay" — nếu sau này streak
+   * được bật lại, hai nơi sẽ luôn đồng nhất với nhau.
+   */
+  async getActivityCalendar(
+    userId: Types.ObjectId,
+    rangeDays = 365,
+  ): Promise<ActivityCalendarResponse> {
+    const rangeEnd = new Date();
+    rangeEnd.setHours(0, 0, 0, 0);
+
+    const rangeStart = new Date(rangeEnd);
+    rangeStart.setDate(rangeStart.getDate() - (rangeDays - 1));
+
+    // Tính mốc "cuối ngày hôm nay" để bắt được cả submission tạo trong hôm nay.
+    const rangeEndExclusive = new Date(rangeEnd);
+    rangeEndExclusive.setDate(rangeEndExclusive.getDate() + 1);
+
+    const grouped = await this.submissionModel.aggregate<{
+      _id: string;
+      count: number;
+    }>([
+      {
+        $match: {
+          userId,
+          createdAt: { $gte: rangeStart, $lt: rangeEndExclusive },
+        },
+      },
+      {
+        // %Y-%m-%d theo giờ local server (không truyền `timezone` => dùng
+        // system timezone của process, đồng nhất với `new Date().setHours`
+        // ở GamificationService).
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$createdAt' },
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const countByDate = new Map(grouped.map((g) => [g._id, g.count]));
+    const totalSubmissions = grouped.reduce((sum, g) => sum + g.count, 0);
+    const totalActiveDays = grouped.length;
+
+    // Duyệt tuần tự từng ngày trong range để tính streak dựa trên NGÀY LIÊN
+    // TIẾP thực tế (không phụ thuộc field gamification.currentStreak, hiện
+    // chưa có nơi nào trong codebase cập nhật field đó).
+    let runningStreak = 0;
+    let maxStreak = 0;
+    let currentStreak = 0;
+    const cursor = new Date(rangeStart);
+    while (cursor.getTime() < rangeEndExclusive.getTime()) {
+      const key = this.toLocalDateKey(cursor);
+      if (countByDate.has(key)) {
+        runningStreak += 1;
+        maxStreak = Math.max(maxStreak, runningStreak);
+      } else {
+        runningStreak = 0;
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    // currentStreak = streak đang chạy tính đến hết ngày hôm nay.
+    currentStreak = runningStreak;
+
+    const days: ActivityDay[] = grouped.map((g) => ({
+      date: g._id,
+      count: g.count,
+    }));
+
+    return {
+      totalSubmissions,
+      totalActiveDays,
+      maxStreak,
+      currentStreak,
+      rangeStart: this.toLocalDateKey(rangeStart),
+      rangeEnd: this.toLocalDateKey(rangeEnd),
+      days,
+    };
+  }
+
+  async getProgressSummary(
+    userId: Types.ObjectId,
+  ): Promise<ProgressSummaryResponse> {
+    const acceptedSubmissions = await this.submissionModel
+      .find({
+        userId,
+        status: DbSubmissionStatus.ACCEPTED,
+      })
+      .sort({ createdAt: 1, _id: 1 })
+      .select({
+        practiceId: 1,
+        title: 1,
+        topic: 1,
+        difficulty: 1,
+        nodeId: 1,
+      })
+      .lean();
+
+    const solvedByPracticeId = new Map<
+      string,
+      (typeof acceptedSubmissions)[number]
+    >();
+    for (const item of acceptedSubmissions) {
+      if (!solvedByPracticeId.has(item.practiceId)) {
+        solvedByPracticeId.set(item.practiceId, item);
+      }
+    }
+
+    const solvedItems = [...solvedByPracticeId.values()];
+    const nodeIds = solvedItems
+      .map((item) => item.nodeId)
+      .filter(
+        (value): value is Types.ObjectId => value instanceof Types.ObjectId,
+      );
+    const titles = [
+      ...new Set(
+        solvedItems
+          .map((item) => item.title?.trim())
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ];
+
+    const [roadmapNodesById, roadmapNodesByTitle] = await Promise.all([
+      nodeIds.length
+        ? this.roadmapNodeModel
+          .find({ _id: { $in: nodeIds } })
+          .select({ _id: 1, difficulty: 1 })
+          .lean()
+        : Promise.resolve([]),
+      titles.length
+        ? this.roadmapNodeModel
+          .find({ title: { $in: titles } })
+          .select({ title: 1, difficulty: 1 })
+          .lean()
+        : Promise.resolve([]),
+    ]);
+
+    const difficultyByNodeId = new Map(
+      roadmapNodesById.map((item) => [String(item._id), item.difficulty]),
+    );
+    const difficultyByTitle = new Map(
+      roadmapNodesByTitle.map((item) => [
+        item.title.trim().toLowerCase(),
+        item.difficulty,
+      ]),
+    );
+
+    const overall = EMPTY_BREAKDOWN();
+    const chaptersMap = new Map<string, DifficultyBreakdown>();
+    const solvedPracticeIds: string[] = [];
+
+    for (const item of solvedItems) {
+      solvedPracticeIds.push(item.practiceId);
+
+      const topic = item.topic?.trim() || 'General';
+      const difficulty =
+        item.difficulty ??
+        (item.nodeId
+          ? difficultyByNodeId.get(String(item.nodeId))
+          : undefined) ??
+        (item.title
+          ? difficultyByTitle.get(item.title.trim().toLowerCase())
+          : undefined);
+
+      const difficultyKey = this.toDifficultyBreakdownKey(difficulty);
+      if (!difficultyKey) continue;
+
+      overall[difficultyKey] += 1;
+
+      if (!chaptersMap.has(topic)) {
+        chaptersMap.set(topic, EMPTY_BREAKDOWN());
+      }
+      chaptersMap.get(topic)![difficultyKey] += 1;
+    }
+
+    const chapters = [...chaptersMap.entries()]
+      .map(([chapter, breakdown]) => ({ chapter, breakdown }))
+      .sort((a, b) => a.chapter.localeCompare(b.chapter));
+
+    return {
+      solvedPracticeIds,
+      overall,
+      chapters,
+    };
   }
 
   private async evaluate(
@@ -179,11 +464,11 @@ export class ExercisesService {
             : `Passed ${passedCount}/${total} backend ${mode === 'full' ? 'full' : 'sample'} checks.`
           : isVi
             ? `Pass ${passedCount}/${total} tiêu chí backend${mode === 'full' ? ' (full)' : ' (sample)'}. Cần sửa: ${failedCases
-                .map((item) => item.title)
-                .join(', ')}.`
+              .map((item) => item.title)
+              .join(', ')}.`
             : `Passed ${passedCount}/${total} backend ${mode === 'full' ? 'full' : 'sample'} checks. Improve: ${failedCases
-                .map((item) => item.title)
-                .join(', ')}.`,
+              .map((item) => item.title)
+              .join(', ')}.`,
       cases,
     };
   }
@@ -771,15 +1056,15 @@ export class ExercisesService {
     item:
       | (Submission & { _id?: Types.ObjectId; createdAt?: Date })
       | {
-          _id?: Types.ObjectId;
-          createdAt?: Date;
-          status: DbSubmissionStatus;
-          language: string;
-          runtimeMs?: number;
-          memoryKb?: number;
-          notes?: string;
-          compilerError?: string;
-        },
+        _id?: Types.ObjectId;
+        createdAt?: Date;
+        status: DbSubmissionStatus;
+        language: string;
+        runtimeMs?: number;
+        memoryKb?: number;
+        notes?: string;
+        compilerError?: string;
+      },
   ): SubmissionRecord {
     const statusLabel: Record<DbSubmissionStatus, SubmissionStatusLabel> = {
       [DbSubmissionStatus.PENDING]: 'Wrong Answer',
@@ -820,5 +1105,127 @@ export class ExercisesService {
   private toObjectId(value?: string) {
     if (!value || !Types.ObjectId.isValid(value)) return undefined;
     return new Types.ObjectId(value);
+  }
+
+  private normalizeDifficulty(value?: string | null) {
+    const normalized = value?.trim().toLowerCase();
+    switch (normalized) {
+      case QuestionDifficulty.EASY.toLowerCase():
+        return QuestionDifficulty.EASY;
+      case QuestionDifficulty.MEDIUM.toLowerCase():
+        return QuestionDifficulty.MEDIUM;
+      case QuestionDifficulty.HARD.toLowerCase():
+        return QuestionDifficulty.HARD;
+      default:
+        return undefined;
+    }
+  }
+
+  /** Format Date -> 'yyyy-MM-dd' theo giờ LOCAL (không dùng toISOString vì nó là UTC). */
+  private toLocalDateKey(date: Date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  private toDifficultyBreakdownKey(difficulty?: QuestionDifficulty) {
+    switch (difficulty) {
+      case QuestionDifficulty.EASY:
+        return 'easy' as const;
+      case QuestionDifficulty.MEDIUM:
+        return 'medium' as const;
+      case QuestionDifficulty.HARD:
+        return 'hard' as const;
+      default:
+        return undefined;
+    }
+  }
+
+  private async ensureUserExists(userId: Types.ObjectId) {
+    const existing = await this.userModel.exists({ _id: userId });
+    if (existing) return;
+
+    await this.userModel.create({
+      _id: userId,
+      username: `demo-user-${String(userId).slice(-6)}`,
+      email: `demo-${String(userId).slice(-6)}@codeforglory.local`,
+      isFirstLogin: false,
+      gamification: {
+        coins: 0,
+        xp: 0,
+        level: 1,
+      },
+    });
+  }
+
+  private async resolveDifficulty(
+    dto: PracticeEvaluationDto,
+  ): Promise<QuestionDifficulty | undefined> {
+    const fromPayload = this.normalizeDifficulty(dto.difficulty);
+    if (fromPayload) return fromPayload;
+
+    const nodeObjectId = this.toObjectId(dto.nodeId);
+    if (nodeObjectId) {
+      const roadmapNode = await this.roadmapNodeModel
+        .findById(nodeObjectId)
+        .select({ difficulty: 1 })
+        .lean();
+      if (roadmapNode?.difficulty) return roadmapNode.difficulty;
+    }
+
+    if (!dto.title?.trim()) return undefined;
+
+    const roadmapNode = await this.roadmapNodeModel
+      .findOne({
+        title: {
+          $regex: new RegExp(`^${escapeRegExp(dto.title.trim())}$`, 'i'),
+        },
+      })
+      .select({ difficulty: 1 })
+      .lean();
+
+    return roadmapNode?.difficulty;
+  }
+
+  /**
+   * Award coins to user on their FIRST Accepted submission for a given exercise.
+   * Coin amounts: Easy → 100 | Medium → 200 | Hard → 300
+   */
+  private async awardCoinsForAccepted(
+    userId: Types.ObjectId,
+    createdSubmissionId: Types.ObjectId,
+    practiceId: string,
+    difficulty?: QuestionDifficulty,
+  ): Promise<number> {
+    try {
+      const rewardKey = this.toDifficultyBreakdownKey(difficulty);
+      if (!rewardKey) return 0;
+
+      const alreadyRewarded = await this.submissionModel.findOne({
+        userId,
+        status: DbSubmissionStatus.ACCEPTED,
+        _id: { $ne: createdSubmissionId },
+        practiceId,
+      });
+      if (alreadyRewarded) return 0;
+
+      const coinsRewardMap = {
+        easy: 100,
+        medium: 200,
+        hard: 300,
+      } as const;
+      const coinsReward = coinsRewardMap[rewardKey];
+      await this.ensureUserExists(userId);
+      await this.userModel.updateOne(
+        { _id: userId },
+        { $inc: { 'gamification.coins': coinsReward } },
+      );
+
+      return coinsReward;
+    } catch {
+      // Best-effort — coin errors must never break the submission response
+      return 0;
+    }
   }
 }

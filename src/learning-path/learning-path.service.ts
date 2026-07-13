@@ -58,6 +58,9 @@ export class LearningPathService {
   }
 
   async findPathById(pathId: string) {
+    if (!Types.ObjectId.isValid(pathId)) {
+      throw new NotFoundException('Roadmap not found');
+    }
     const path = await this.roadmapModel.findById(pathId);
     if (!path) throw new NotFoundException('Roadmap not found');
     return path;
@@ -99,6 +102,9 @@ export class LearningPathService {
   }
 
   async getNodeById(nodeId: string) {
+    if (!Types.ObjectId.isValid(nodeId)) {
+      throw new NotFoundException('Node not found');
+    }
     const node = await this.nodeModel.findById(nodeId);
     if (!node) throw new NotFoundException('Node not found');
     return node;

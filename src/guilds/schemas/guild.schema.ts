@@ -215,5 +215,4 @@ export class Guild {
 
 export const GuildSchema = SchemaFactory.createForClass(Guild);
 
-GuildSchema.index({ slug: 1 }, { unique: true });
 GuildSchema.index({ type: 1, rank: 1 });

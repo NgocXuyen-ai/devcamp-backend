@@ -22,6 +22,18 @@ export interface CreateUserInput {
   role?: UserRole;
 }
 
+/** Một dòng trong bảng xếp hạng theo XP — chỉ những field cần cho hiển thị. */
+export interface XpLeaderboardRow {
+  _id: Types.ObjectId;
+  username: string;
+  avatarUrl?: string;
+  fieldFocus?: string;
+  gamification: {
+    xp: number;
+    level: number;
+  };
+}
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -207,6 +219,31 @@ export class UsersService {
       userId: u._id,
       currentStreak: u.gamification?.currentStreak ?? 0,
       lastActiveDate: u.gamification?.lastActiveDate,
+    }));
+  }
+
+  /**
+   * Top user theo tổng XP toàn thời gian (all-time), toàn hệ thống — không
+   * lọc theo field. Dùng cho mini leaderboard ở trang chủ. Khác với
+   * UserRankingService.getLeaderboard(), vốn xếp hạng theo ratingPoints
+   * (ELO của battle) trong collection UserRanking riêng.
+   */
+  async getXpLeaderboard(limit: number): Promise<XpLeaderboardRow[]> {
+    const rows = await this.userModel
+      .find({}, 'username avatarUrl fieldFocus gamification')
+      .sort({ 'gamification.xp': -1 })
+      .limit(limit)
+      .lean();
+
+    return rows.map((u: any) => ({
+      _id: u._id,
+      username: u.username,
+      avatarUrl: u.avatarUrl,
+      fieldFocus: u.fieldFocus,
+      gamification: {
+        xp: u.gamification?.xp ?? 0,
+        level: u.gamification?.level ?? 1,
+      },
     }));
   }
 

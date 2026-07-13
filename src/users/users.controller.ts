@@ -18,12 +18,14 @@ import { paginate } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../common/guard/jwt-auth.guard';
 import { ParseObjectIdPipe } from '../common/object-id.pipe';
 import { LeaderboardQueryDto } from './dto/leaderboard-query.dto';
+import { XpLeaderboardQueryDto } from './dto/xp-leaderboard-query.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersService } from './service/users.service';
 import { UserRankingService } from './service/ranking.service';
 import { ExercisesService } from '../exercises/exercises.service';
 import { UserDocument } from './schemas/users.schema';
+import { getXpProgress } from './service/gamification.service';
 
 @ApiTags('Users')
 @Controller()
@@ -94,12 +96,16 @@ export class UsersController {
   }
 
   @Get('me/stats')
-  @ApiOperation({ summary: 'XP, level, streak, badges, coins' })
+  @ApiOperation({
+    summary:
+      'XP, level, streak, badges, coins + xpProgress (tiến độ XP trong level hiện tại, dùng để vẽ progress bar)',
+  })
   async myStats(@CurrentUser('userId') userId: Types.ObjectId) {
     const user = await this.users.findById(userId);
     const rankings = await this.rankings.getForUser(userId);
     return {
       gamification: user.gamification,
+      xpProgress: getXpProgress(user.gamification.xp),
       rankings,
     };
   }
@@ -115,6 +121,17 @@ export class UsersController {
       q.limit ?? 20,
     );
     return paginate(items, total, q.page ?? 1, q.limit ?? 20);
+  }
+
+  // Cũng phải đứng trước 'users/:id' vì cùng lý do route-matching ở trên.
+  @Get('users/leaderboard/xp')
+  @Public()
+  @ApiOperation({
+    summary:
+      'Top user theo tổng XP toàn thời gian (all-time, toàn hệ thống) — dùng cho mini leaderboard trang chủ',
+  })
+  async xpLeaderboard(@Query() q: XpLeaderboardQueryDto) {
+    return this.users.getXpLeaderboard(q.limit ?? 3);
   }
 
   @Get('users/:id')

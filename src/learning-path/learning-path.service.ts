@@ -18,6 +18,10 @@ import {
 } from '../common/enums';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RecallService } from '../recall/recall.service';
+import {
+  buildBackendRoadmapSeed,
+  buildFrontendRoadmapSeed,
+} from './learning-path.seed';
 
 const ROADMAP_STAGE_SIZE = 10;
 type RoadmapWithId = Roadmap & { _id: Types.ObjectId };
@@ -39,7 +43,39 @@ export class LearningPathService {
 
     private readonly notifications: NotificationsService,
     private readonly recall: RecallService,
-  ) { }
+  ) {}
+
+  // =========================
+  // SEED
+  // =========================
+
+  /**
+   * Đảm bảo luôn tồn tại Roadmap "Frontend Roadmap" và "Backend Roadmap"
+   * (mỗi cái kèm đủ 30 RoadmapNode) trước khi trả dữ liệu ra ngoài.
+   *
+   * Vì sao cần: FE (`LearningPathMap.tsx`) chỉ hiển thị dữ liệu THẬT (cho
+   * phép progress/unlock hoạt động) khi `GET /learning-paths` trả về ít
+   * nhất 1 roadmap khớp field đang xem — nếu rỗng, FE tự fallback sang một
+   * mảng tĩnh hard-code trong RoadmapViewer.tsx chỉ để hiển thị, không hề
+   * gọi lại backend nữa, nên node "kế tiếp" sẽ không bao giờ được mở khóa
+   * dù người dùng đã nộp bài thành công.
+   *
+   * Theo đúng pattern `ensureSeeded()` đã dùng ở GuildsService: kiểm tra
+   * rỗng trước khi insert, nên gọi lại nhiều lần vẫn an toàn (idempotent),
+   * và không cần người dùng tự chạy script CLI riêng.
+   */
+  private async ensureSeeded(): Promise<void> {
+    const count = await this.roadmapModel.countDocuments({
+      field: { $in: [CareerField.FRONTEND, CareerField.BACKEND] },
+    });
+    if (count > 0) return;
+
+    const seeds = [buildFrontendRoadmapSeed(), buildBackendRoadmapSeed()];
+    for (const { roadmap, nodes } of seeds) {
+      await this.roadmapModel.create(roadmap);
+      await this.nodeModel.insertMany(nodes);
+    }
+  }
 
   // =========================
   // ROADMAP
@@ -54,10 +90,12 @@ export class LearningPathService {
   }
 
   async findAllPaths() {
+    await this.ensureSeeded();
     return this.roadmapModel.find();
   }
 
   async findPathById(pathId: string) {
+    await this.ensureSeeded();
     if (!Types.ObjectId.isValid(pathId)) {
       throw new NotFoundException('Roadmap not found');
     }
@@ -166,16 +204,25 @@ export class LearningPathService {
       // Activity feed là phụ — lỗi ghi history không được làm hỏng việc lưu progress.
     }
 
-    // Báo "bài học mới mở khóa" + khởi tạo lịch ôn tập SM-2, đúng lần đầu
-    // hoàn thành node này.
+    // Mở khóa node kế tiếp trong roadmap + khởi tạo lịch ôn tập SM-2,
+    // đúng lần đầu hoàn thành node này (tránh mở lại/spam khi nộp lại
+    // bài của 1 node đã xong từ trước).
     if (isCompleted && !wasCompleted) {
-      this.notifications
-        .notifyLessonUnlock({
-          userId: userId.toString(),
-          nodeId,
-          nodeTitle: node.title,
-        })
-        .catch(() => undefined);
+      const nextNode = await this.unlockNextNode(userId, node);
+
+      // Báo "bài học mới mở khóa" — trỏ vào node VỪA được mở (nextNode),
+      // không phải node vừa hoàn thành, để nội dung thông báo đúng nghĩa
+      // "bạn có thể tiếp tục với X". Nếu đây là node cuối roadmap thì
+      // không có nextNode → không bắn thông báo unlock.
+      if (nextNode) {
+        this.notifications
+          .notifyLessonUnlock({
+            userId: userId.toString(),
+            nodeId: nextNode._id.toString(),
+            nodeTitle: nextNode.title,
+          })
+          .catch(() => undefined);
+      }
 
       this.recall
         .scheduleInitialReview(userId, new Types.ObjectId(nodeId))
@@ -183,6 +230,82 @@ export class LearningPathService {
     }
 
     return progress;
+  }
+
+  /**
+   * Tìm node kế tiếp ngay sau `completedNode` trong cùng roadmap (theo thứ
+   * tự milestoneOrder → order, đúng thứ tự getNodes() trả về), rồi mở khóa
+   * nó cho user bằng cách upsert UserProgress = CURRENT.
+   *
+   * Không đụng tới node kế tiếp nếu nó đã COMPLETED/SKIPPED từ trước (user
+   * có thể đã học vượt lên hoặc được pre-unlock qua survey placement) —
+   * chỉ nâng cấp khi đang LOCKED/TEMP_LOCKED hoặc chưa có progress record.
+   *
+   * Trả về node vừa mở khóa (hoặc undefined nếu completedNode là node
+   * cuối cùng của roadmap, hoặc node kế tiếp không cần mở khóa lại).
+   */
+  private async unlockNextNode(
+    userId: Types.ObjectId,
+    completedNode: RoadmapNode & { _id: Types.ObjectId },
+  ) {
+    const nextNode = await this.nodeModel
+      .findOne({
+        roadmapId: completedNode.roadmapId,
+        $or: [
+          {
+            milestoneOrder: completedNode.milestoneOrder,
+            order: { $gt: completedNode.order },
+          },
+          { milestoneOrder: { $gt: completedNode.milestoneOrder } },
+        ],
+      })
+      .sort({ milestoneOrder: 1, order: 1 });
+
+    if (!nextNode) return undefined; // completedNode là node cuối roadmap
+
+    const existing = await this.progressModel
+      .findOne({ userId, nodeId: nextNode._id })
+      .lean();
+
+    // Đã completed/skipped/current từ trước (vượt tiến độ, pre-unlock qua
+    // survey, hoặc đã mở sẵn) → không hạ cấp, không cần báo lại.
+    if (
+      existing &&
+      [
+        NodeStatus.COMPLETED,
+        NodeStatus.SKIPPED,
+        NodeStatus.CURRENT,
+        NodeStatus.OPEN,
+      ].includes(existing.status)
+    ) {
+      return undefined;
+    }
+
+    const now = new Date();
+    await this.progressModel.updateOne(
+      { userId, nodeId: nextNode._id },
+      {
+        $set: {
+          userId,
+          nodeId: nextNode._id,
+          roadmapId: nextNode.roadmapId,
+          status: NodeStatus.CURRENT,
+          lastAttemptAt: now,
+          ...(existing?.startedAt ? {} : { startedAt: now }),
+        },
+        $setOnInsert: {
+          score: 0,
+          attemptCount: 0,
+          submitCount: 0,
+          wrongCount: 0,
+          timeSpentSeconds: 0,
+          bookmarked: false,
+        },
+      },
+      { upsert: true },
+    );
+
+    return nextNode;
   }
 
   async getMyProgress(userId: Types.ObjectId, roadmapId: string) {
@@ -267,9 +390,19 @@ export class LearningPathService {
     nodes.forEach((node, index) => {
       const nodeStageOrder = Math.floor(index / ROADMAP_STAGE_SIZE);
       const existing = existingByNodeId.get(node._id.toString());
+      const isSurveySeededCompletion =
+        existing?.status === NodeStatus.COMPLETED &&
+        (existing.submitCount ?? 0) === 0 &&
+        (existing.attemptCount ?? 0) === 0 &&
+        (existing.score ?? 0) >= 100;
 
       if (nodeStageOrder < startStageOrder) {
-        if (existing?.status === NodeStatus.COMPLETED) return;
+        if (
+          existing?.status === NodeStatus.COMPLETED &&
+          !isSurveySeededCompletion
+        ) {
+          return;
+        }
 
         operations.push({
           updateOne: {
@@ -282,12 +415,11 @@ export class LearningPathService {
                 userId,
                 nodeId: node._id,
                 roadmapId: roadmap._id,
-                status: NodeStatus.COMPLETED,
-                score: Math.max(existing?.score ?? 0, 100),
+                status: NodeStatus.OPEN,
+                score: isSurveySeededCompletion ? 0 : (existing?.score ?? 0),
                 startedAt: existing?.startedAt ?? now,
-                completedAt: existing?.completedAt ?? now,
-                lastAttemptAt: existing?.lastAttemptAt ?? now,
               },
+              $unset: { completedAt: 1 },
               $setOnInsert: {
                 attemptCount: 0,
                 submitCount: 0,

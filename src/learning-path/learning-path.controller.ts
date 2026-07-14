@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  UnauthorizedException,
   Param,
   Post,
   Req,
@@ -17,13 +18,22 @@ import { UpdateProgressDto } from './dto/update-progress.dto';
 
 type JwtUser = { userId?: string | Types.ObjectId } | null;
 
-/** Lấy userId từ JWT nếu có, fallback demo user để chạy local không cần đăng nhập. */
-function getUserIdFromReq(req: Request): Types.ObjectId {
+/**
+ * Lấy userId từ JWT nếu có.
+ * Nếu không có JWT: dùng header `x-guest-user-id` (được FE gắn tự động) để
+ * có "guest identity" ổn định theo từng trình duyệt, tránh dùng demo user
+ * chung khiến progress bị lẫn của người khác.
+ */
+function getUserIdFromReq(req: Request): Types.ObjectId | null {
   const jwtUser = (req as unknown as { user?: JwtUser }).user;
   const raw = jwtUser?.userId;
   if (raw && Types.ObjectId.isValid(raw)) return new Types.ObjectId(raw);
-  // Demo user dùng chung với history/exercises/forum/... để dữ liệu khớp khi chạy local chưa đăng nhập.
-  return new Types.ObjectId('64b000000000000000000001');
+
+  const guestId = req.get('x-guest-user-id');
+  if (guestId && Types.ObjectId.isValid(guestId)) {
+    return new Types.ObjectId(guestId);
+  }
+  return null;
 }
 
 @Controller('learning-paths')
@@ -62,8 +72,12 @@ export class LearningPathController {
     @Param('nodeId') nodeId: string,
     @Body() dto: UpdateProgressDto,
   ) {
+    const userId = getUserIdFromReq(req);
+    if (!userId) {
+      throw new UnauthorizedException('Authentication required');
+    }
     return this.learningPathService.updateProgress(
-      getUserIdFromReq(req),
+      userId,
       nodeId,
       dto,
     );
@@ -72,8 +86,10 @@ export class LearningPathController {
   @Get(':id/my-progress')
   @UseGuards(OptionalJwtAuthGuard)
   getMyProgress(@Req() req: Request, @Param('id') pathId: string) {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return [];
     return this.learningPathService.getMyProgress(
-      getUserIdFromReq(req),
+      userId,
       pathId,
     );
   }

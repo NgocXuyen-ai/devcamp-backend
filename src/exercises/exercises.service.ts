@@ -587,12 +587,16 @@ export class ExercisesService {
         'css-layout',
         isVi ? 'Layout engine' : 'Layout engine',
         isVi ? 'Tạo layout chính' : 'Create the main layout',
-        '`display: flex` hoặc `display: grid`',
-        [/display\s*:\s*flex/i, /display\s*:\s*grid/i],
+        '`display: flex`, `display: grid`, hoặc `position` (fixed/sticky/absolute) cho overlay/sheet',
+        [
+          /display\s*:\s*flex/i,
+          /display\s*:\s*grid/i,
+          /position\s*:\s*(fixed|sticky|absolute)/i,
+        ],
         isVi ? 'Đã có layout engine.' : 'A layout engine is present.',
         isVi
-          ? 'Thiếu `display: flex` hoặc `display: grid`.'
-          : 'Missing `display: flex` or `display: grid`.',
+          ? 'Thiếu `display: flex`, `display: grid`, hoặc `position` phù hợp.'
+          : 'Missing `display: flex`, `display: grid`, or an appropriate `position` rule.',
       );
       addAny(
         'css-spacing',
@@ -756,7 +760,8 @@ export class ExercisesService {
       topic === 'State Management' ||
       topic === 'Testing' ||
       topic === 'Performance' ||
-      topic === 'Forms & Validation'
+      topic === 'Forms & Validation' ||
+      topic === 'API Integration'
     ) {
       addAny(
         'client-core',
@@ -996,7 +1001,8 @@ export class ExercisesService {
       topic === 'State Management' ||
       topic === 'Testing' ||
       topic === 'Performance' ||
-      topic === 'Forms & Validation'
+      topic === 'Forms & Validation' ||
+      topic === 'API Integration'
     ) {
       pushAny(
         'hidden-client-guardrail',
@@ -1284,7 +1290,6 @@ export class ExercisesService {
       const xpReward = xpRewardMap[rewardKey];
       await this.ensureUserExists(userId);
       await this.gamificationService.addXp(userId, xpReward);
-
       return xpReward;
     } catch {
       // Best-effort — XP errors must never break the submission response

@@ -22,6 +22,7 @@ import type {
   SubmissionStatusLabel,
 } from './judge.types';
 import { NotificationsService } from '../notifications/notifications.service';
+import { GamificationService } from '../users/service/gamification.service';
 
 type JudgeTemplate = {
   id: string;
@@ -102,6 +103,7 @@ export class ExercisesService {
     @InjectModel(RoadmapNode.name)
     private readonly roadmapNodeModel: Model<RoadmapNodeDocument>,
     private readonly notifications: NotificationsService,
+    private readonly gamificationService: GamificationService,
   ) { }
 
   async run(dto: PracticeEvaluationDto): Promise<JudgeRunResult> {
@@ -156,15 +158,30 @@ export class ExercisesService {
       triggeredPenalty: false,
     });
 
-    // ─── Coin reward on first Accepted submission ────────────────────────
+    // ─── Coin + XP reward on first Accepted submission ───────────────────
+    // Coin và XP chạy song song (Promise.all) vì đều đọc "lần Accepted đầu
+    // tiên cho practiceId này" ĐỘC LẬP với nhau qua chính submissionModel —
+    // không có race condition giữa 2 lệnh vì cả hai chỉ query, không ghi đè
+    // lẫn nhau. Tách riêng 2 hàm (thay vì gộp 1 hàm award chung) để giữ
+    // nguyên awardCoinsForAccepted() đang chạy ổn định, tránh sửa logic coin
+    // đã test kỹ khi chỉ cần thêm XP.
     let coinsEarned = 0;
+    let xpEarned = 0;
     if (dbStatus === DbSubmissionStatus.ACCEPTED) {
-      coinsEarned = await this.awardCoinsForAccepted(
-        userId,
-        created._id,
-        dto.practiceId,
-        normalizedDifficulty,
-      );
+      [coinsEarned, xpEarned] = await Promise.all([
+        this.awardCoinsForAccepted(
+          userId,
+          created._id,
+          dto.practiceId,
+          normalizedDifficulty,
+        ),
+        this.awardXpForAccepted(
+          userId,
+          created._id,
+          dto.practiceId,
+          normalizedDifficulty,
+        ),
+      ]);
 
       // coinsEarned > 0 chỉ đúng ở lần Accepted ĐẦU TIÊN cho bài này (xem
       // awardCoinsForAccepted) — dùng luôn điều kiện này để tránh spam
@@ -189,6 +206,7 @@ export class ExercisesService {
       submission,
       submissions,
       coinsEarned,
+      xpEarned,
     };
   }
 
@@ -1225,6 +1243,51 @@ export class ExercisesService {
       return coinsReward;
     } catch {
       // Best-effort — coin errors must never break the submission response
+      return 0;
+    }
+  }
+
+  /**
+   * Award XP to user on their FIRST Accepted submission for a given exercise.
+   * XP amounts: Easy → 20 | Medium → 40 | Hard → 60 (≈ 1/5 mức coin tương
+   * ứng — coin dùng để mua đồ ở shop nên cần nhiều, XP dùng để lên level nên
+   * cần chậm hơn, tránh việc level tăng vọt quá nhanh những ngày đầu).
+   *
+   * Cố tình KHÔNG gộp chung với awardCoinsForAccepted(): 2 hàm check "đã
+   * Accepted trước đó chưa" độc lập qua submissionModel (không qua field
+   * chung nào), nên tách riêng để 1 trong 2 lỗi không kéo hàm còn lại theo —
+   * đúng tinh thần best-effort mà awardCoinsForAccepted() đã áp dụng.
+   */
+  private async awardXpForAccepted(
+    userId: Types.ObjectId,
+    createdSubmissionId: Types.ObjectId,
+    practiceId: string,
+    difficulty?: QuestionDifficulty,
+  ): Promise<number> {
+    try {
+      const rewardKey = this.toDifficultyBreakdownKey(difficulty);
+      if (!rewardKey) return 0;
+
+      const alreadyRewarded = await this.submissionModel.findOne({
+        userId,
+        status: DbSubmissionStatus.ACCEPTED,
+        _id: { $ne: createdSubmissionId },
+        practiceId,
+      });
+      if (alreadyRewarded) return 0;
+
+      const xpRewardMap = {
+        easy: 20,
+        medium: 40,
+        hard: 60,
+      } as const;
+      const xpReward = xpRewardMap[rewardKey];
+      await this.ensureUserExists(userId);
+      await this.gamificationService.addXp(userId, xpReward);
+
+      return xpReward;
+    } catch {
+      // Best-effort — XP errors must never break the submission response
       return 0;
     }
   }

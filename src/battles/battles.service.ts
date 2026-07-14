@@ -41,6 +41,7 @@ import {
   buildArenaOverview,
   type ArenaOverviewResponse,
 } from './data/arena-overview.data';
+import { GamificationService } from '../users/service/gamification.service';
 
 export interface LeaderboardRow {
   rank: number;
@@ -73,7 +74,8 @@ export class BattlesService implements OnModuleInit {
     private readonly gateway: BattlesGateway,
     private readonly codeJudgeService: CodeJudgeService,
     private readonly notifications: NotificationsService,
-  ) {}
+    private readonly gamificationService: GamificationService,
+  ) { }
 
   async onModuleInit() {
     this.logger.log('🔄 Cleaning up stuck battles...');
@@ -560,6 +562,12 @@ export class BattlesService implements OnModuleInit {
     };
 
     await this.updateRankings(battle, winner?.userId ?? null, isDraw);
+    await this.rewardBattlePlayers(
+      winner?.userId ?? null,
+      loser?.userId ?? null,
+      isDraw,
+      battle.players.map((p) => p.userId),
+    );
 
     this.stopBattleTimer(battleId);
     this.gateway.notifyBattleEnded(battleId, {
@@ -600,7 +608,7 @@ export class BattlesService implements OnModuleInit {
 
       if (timeRemaining <= 0) {
         this.stopBattleTimer(battleId);
-        this.endBattle(battleId).catch(() => {});
+        this.endBattle(battleId).catch(() => { });
       }
     }, 1000);
     this.battleTimers.set(battleId, interval);
@@ -644,6 +652,12 @@ export class BattlesService implements OnModuleInit {
     });
 
     await this.updateRankings(battle, opponent?.userId ?? null, false);
+    await this.rewardBattlePlayers(
+      opponent?.userId ?? null,
+      new Types.ObjectId(userId),
+      false,
+      battle.players.map((p) => p.userId),
+    );
 
     this.stopBattleTimer(battleId);
 
@@ -675,6 +689,67 @@ export class BattlesService implements OnModuleInit {
       message: 'Battle abandoned',
       winnerId: opponent?.userId.toString(),
     };
+  }
+
+  /**
+   * Thưởng coin + XP sau khi battle kết thúc (thắng/thua/hòa), dùng chung
+   * cho cả endBattle() (đấu bình thường) và abandonBattle() (bỏ cuộc) — 2
+   * đường kết thúc trận khác nhau nhưng phải cùng 1 mức thưởng, tránh việc
+   * bỏ cuộc sớm/muộn tạo ra chênh lệch thưởng không hợp lý.
+   *
+   * Mức thưởng thấp hơn Practice vì trận battle ngắn hơn nhiều so với thời
+   * gian giải 1 bài luyện tập, và để tránh việc cày battle liên tục lợi hơn
+   * hẳn so với luyện tập nghiêm túc — 2 nguồn nên bổ trợ nhau, không cạnh
+   * tranh nhau về "đường tắt lên level nhanh nhất".
+   *   Thắng → 150 coin, 30 xp
+   *   Hòa   → 60  coin, 15 xp  (đủ để không cảm thấy phí thời gian đấu)
+   *   Thua  → 20  coin, 5  xp  (an ủi nhỏ, khuyến khích đấu tiếp thay vì bỏ cuộc)
+   *
+   * Best-effort: addXp/addCoins lỗi ở đây không được phép làm hỏng luồng
+   * kết thúc battle (WS event, notification…) — mọi lỗi bị nuốt và log lại.
+   */
+  private async rewardBattlePlayers(
+    winnerId: Types.ObjectId | null,
+    loserId: Types.ObjectId | null,
+    isDraw: boolean,
+    allPlayerIds: Types.ObjectId[],
+  ) {
+    const REWARD = {
+      win: { coins: 150, xp: 30 },
+      draw: { coins: 60, xp: 15 },
+      loss: { coins: 20, xp: 5 },
+    } as const;
+
+    const rewardFor = (playerId: Types.ObjectId) => {
+      if (isDraw) return REWARD.draw;
+      if (winnerId?.toString() === playerId.toString()) return REWARD.win;
+      return REWARD.loss;
+    };
+
+    // isDraw=true thì winnerId/loserId đều null → duyệt allPlayerIds để
+    // không bỏ sót người chơi nào. isDraw=false thì chỉ có đúng winner +
+    // loser cần thưởng (đã đủ trong 2 biến, không cần allPlayerIds).
+    const targets = isDraw
+      ? allPlayerIds
+      : [winnerId, loserId].filter(
+        (id): id is Types.ObjectId => id !== null,
+      );
+
+    const updates = targets.map(async (playerId) => {
+      const reward = rewardFor(playerId);
+      try {
+        await Promise.all([
+          this.gamificationService.addXp(playerId, reward.xp),
+          this.gamificationService.addCoins(playerId, reward.coins),
+        ]);
+      } catch (err) {
+        this.logger.warn(
+          `rewardBattlePlayers: failed for user ${playerId.toString()} — ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    });
+
+    await Promise.all(updates);
   }
 
   private async updateRankings(

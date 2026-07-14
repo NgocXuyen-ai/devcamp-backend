@@ -21,6 +21,7 @@ import {
 } from './schemas/guild.schema';
 import { User, UserDocument } from '../users/schemas/users.schema';
 import { UsersService } from '../users/service/users.service';
+import { GamificationService } from '../users/service/gamification.service';
 
 type GuildSortKey = NonNullable<GetGuildsQueryDto['sortBy']>;
 
@@ -32,7 +33,8 @@ export class GuildsService {
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
     private readonly usersService: UsersService,
-  ) {}
+    private readonly gamificationService: GamificationService,
+  ) { }
 
   async getOverview(userId: Types.ObjectId) {
     await this.ensureSeeded();
@@ -52,8 +54,8 @@ export class GuildsService {
     );
     const avgWinRate = guilds.length
       ? Math.round(
-          guilds.reduce((sum, guild) => sum + guild.winRate, 0) / guilds.length,
-        )
+        guilds.reduce((sum, guild) => sum + guild.winRate, 0) / guilds.length,
+      )
       : 0;
     const totalQuests = guilds.reduce(
       (sum, guild) => sum + guild.quests.length,
@@ -473,17 +475,14 @@ export class GuildsService {
       createdAt: new Date(),
     });
 
+    // Dùng addXp()/addCoins() thay vì $inc trực tiếp: $inc chỉ cộng số xp thô
+    // mà không tính lại gamification.level, nên level bị "đứng yên" dù xp đã
+    // tăng. addXp() luôn gọi computeLevelFromXp() sau khi cộng, giữ level
+    // đồng bộ tuyệt đối với xp — cùng cơ chế Practice/Battle đang dùng.
     await Promise.all([
       guild.save(),
-      this.userModel.updateOne(
-        { _id: userId },
-        {
-          $inc: {
-            'gamification.xp': quest.rewardXp,
-            'gamification.coins': quest.rewardCoins,
-          },
-        },
-      ),
+      this.gamificationService.addXp(userId, quest.rewardXp),
+      this.gamificationService.addCoins(userId, quest.rewardCoins),
     ]);
 
     return {

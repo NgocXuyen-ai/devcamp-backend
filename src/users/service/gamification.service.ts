@@ -75,10 +75,25 @@ export class GamificationService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
   ) { }
 
+  /**
+   * Cộng XP cho user, tự động nhân đôi nếu XP boost (mua ở shop) còn hiệu
+   * lực. Đây là ĐIỂM VÀO DUY NHẤT để cộng XP trong toàn bộ backend — mọi nơi
+   * trả thưởng XP (Practice, Battle, Guild quest, v.v) phải gọi qua đây,
+   * không được $inc trực tiếp vào gamification.xp, để: (1) level luôn đồng
+   * bộ qua computeLevelFromXp(), (2) xpBoostExpiresAt (đã có sẵn ở schema và
+   * shop.service.ts nhưng trước đây không nơi nào đọc) thực sự có tác dụng.
+   */
   async addXp(userId: Types.ObjectId, amount: number): Promise<UserDocument> {
     const user = await this.userModel.findById(userId);
     if (!user) throw new NotFoundException('User not found');
-    user.gamification.xp += Math.max(0, amount);
+
+    const boostActive =
+      !!user.gamification.xpBoostExpiresAt &&
+      user.gamification.xpBoostExpiresAt.getTime() > Date.now();
+    const baseAmount = Math.max(0, amount);
+    const finalAmount = boostActive ? baseAmount * 2 : baseAmount;
+
+    user.gamification.xp += finalAmount;
     user.gamification.level = computeLevelFromXp(user.gamification.xp);
     await user.save();
     return user;

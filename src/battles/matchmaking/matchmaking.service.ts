@@ -47,9 +47,7 @@ export class MatchmakingService {
     const active = await this.findActiveForUser(input.userId);
 
     if (active) {
-      throw new ConflictException(
-        'You already have an active battle. Finish it first.',
-      );
+      return active as BattleDocument;
     }
 
     const newPlayer: BattlePlayer = {
